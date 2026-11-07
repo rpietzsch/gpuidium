@@ -39,7 +39,7 @@ extended-description = """\
 GPUIdium keeps your web apps in a narrow icon sidebar. Every entry has its own isolated \
 browser profile. Pages are rendered by the system WebKitGTK; runs on X11 or XWayland."""
 # $auto resolves the exact shared-library packages (incl. libwebkit2gtk-4.1-0) at build time.
-depends = "$auto, xdg-utils"
+depends = "$auto, libwebkit2gtk-4.1-0 (>= 2.40), libvulkan1, xdg-utils"
 recommends = "libnotify-bin, mesa-vulkan-drivers"
 assets = [
   ["target/release/gpuidium", "usr/bin/", "755"],
@@ -65,7 +65,7 @@ assets = [
 ]
 
 [package.metadata.generate-rpm.requires]
-webkit2gtk4_1 = ">= 2.40"
+"webkit2gtk4.1" = ">= 2.40"
 gtk3 = "*"
 libxkbcommon-x11 = "*"
 vulkan-loader = "*"
