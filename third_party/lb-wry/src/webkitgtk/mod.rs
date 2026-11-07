@@ -874,7 +874,12 @@ impl InnerWebView {
       return Ok(());
     }
     self.last_bounds.set(Some((x, y, width, height)));
+    self.apply_bounds(x, y, width, height);
+    Ok(())
+  }
 
+  /// Unconditionally push a geometry to the native window (see `set_bounds`).
+  fn apply_bounds(&self, x: i32, y: i32, width: i32, height: i32) {
     #[cfg(feature = "x11")]
     if let Some(x11_data) = &self.x11 {
       let window = &x11_data.gtk_window;
@@ -890,9 +895,8 @@ impl InnerWebView {
         .webview
         .size_allocate(&gtk::Allocation::new(x, y, width, height));
     }
-
-    Ok(())
   }
+
 
   #[cfg(feature = "x11")]
   fn set_visible_x11(&self, visible: bool) {
@@ -924,7 +928,22 @@ impl InnerWebView {
     if self.last_visible.get() == Some(visible) {
       return Ok(());
     }
+    let first = self.last_visible.get().is_none();
     self.last_visible.set(Some(visible));
+
+    // GPUIdium patch: after the first show, toggle an X11 child view by mapping/unmapping
+    // its X window and the web view widget only. Hiding and showing the wrapper GtkWindow
+    // makes GTK fall back to its 200x200 default size, which shrank the page to a small
+    // square and, when repaired, cost two relayouts (shrink, grow) per switch on complex pages.
+    #[cfg(feature = "x11")]
+    if !first && self.x11.as_ref().map_or(false, |d| d.is_child) {
+      self.set_visible_x11(visible);
+      self.webview.set_child_visible(visible);
+      self.webview.queue_resize();
+      return Ok(());
+    }
+    let _ = first;
+
     #[cfg(feature = "x11")]
     self.set_visible_x11(visible);
 

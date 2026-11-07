@@ -29,6 +29,7 @@ task lint         # clippy, warnings denied
 task check        # fmt check + lint + test (the CI gate)
 task clean
 task test:isolation  # needs a display: same-origin profile isolation + restart persistence
+task test:switching  # needs a display + xdotool: app switching keeps pages full size, no relayouts
 task test:oidc       # needs a display: mock OIDC login survives restart, stays per-profile
 task bench           # process-tree memory/CPU baseline (needs display + xdotool)
 task package:linux   # dist/gpuidium-<ver>-linux-x86_64.tar.gz (+ .sha256)

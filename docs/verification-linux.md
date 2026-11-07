@@ -27,3 +27,6 @@ Windows and macOS (no hardware); real-world sites for notifications; screen-read
 **Result:** after every switch `hasFocus=true` and a `focus` event fires; typing into the input reaches the right page in both apps (tested with real key events).
 
 **Slow re-render after switching (~2 s on real sites):** not reproduced. With test pages (including a 15k-node page with a title changing 4x/s) WebKit produced a frame ~100-200 ms after the switch and the screen showed the correct page by the first sample (~0.9 s) both with and without the old per-event show/hide churn. Likely tied to heavy real sites or the GPU/compositing path; see `docs/known-limits.md` for the A/B recipe.
+
+## Switching regression (2026-11-07)
+`scripts/test_switching.py`: 9 switches over three 20k-node pages: viewport 1496x1052 every time, 0 relayouts, page focused each time, resize to width 1000 gives a 960 px viewport. PASS.

@@ -103,3 +103,10 @@ tasks:
     cmds:
       - scripts/release-linux.sh
     platforms: [linux]
+
+  test:switching:
+    desc: "Regression: switching apps keeps the page full size, resize works (needs a display and xdotool; uses the release build)"
+    cmds:
+      - cargo build --release -p gpuidium --bin gpuidium
+      - scripts/test_switching.py
+    platforms: [linux]

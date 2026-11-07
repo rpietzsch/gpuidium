@@ -16,6 +16,20 @@ Method: the real app driven with `xdotool`, a test page reporting `requestAnimat
 | Memory per app | Total PSS 261 MB (1 app), 409 MB (3), 558 MB (5): about **75 MB per additional app** (one web + one network process each, a consequence of per-profile isolation); the shell itself is about 131 MB | By design. "Unload inactive apps" frees idle apps |
 | Deferring the first web view until after the first paint | Sidebar 130 ms sooner, but page ready 77 ms **later** | Tried and rejected |
 
+## Regression found and fixed: page shrank to a small square after switching apps
+Reported by the owner after the geometry de-duplication above. Cause: every time a hidden web view is shown, `lb-wry` hid/showed the wrapper `GtkWindow`, and GTK resets that window to its 200x200 default on each show; the per-frame bounds re-apply that used to hide this was gone. Reproduced with a test page reporting `innerWidth/innerHeight` (200x200 on all 18 switches with the fix disabled, 1496x1052 with it).
+
+A first repair (re-apply the bounds after each show) worked but cost two relayouts per switch (shrink, grow), which the owner pointed out is expensive on complex pages. Measured on three 20k-node pages:
+
+| Approach | Relayouts per switch | Key to first frame (median) | Page size |
+|---|---|---|---|
+| Hide/show wrapper window, no re-apply | 0 | 88 ms | **wrong (200x200)** |
+| Re-apply bounds after show (first repair) | 4 | 164 ms | correct |
+| Size hints on the wrapper window | 0-2 | about 92 ms | still wrong after a few switches |
+| **Map/unmap the X window and toggle the widget, no GTK window hide/show (shipped)** | **0** | **48-74 ms** | correct |
+
+`scripts/test_switching.py` (`task test:switching`, needs a display and xdotool) guards this: no tiny viewport, zero relayouts, page focused after each switch, and resizing the window resizes the page.
+
 ## Not reproduced
 Pages repainting about two seconds after switching apps (reported on real sites). With test pages, including a 15k-node page with a title changing four times a second, WebKit produced a frame 100-200 ms after the switch and the screen showed the right page by the first sample (about 0.9 s). The `known-limits.md` entry has an A/B recipe for narrowing it down.
 
