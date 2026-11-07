@@ -1,0 +1,40 @@
+name: ci
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxkbcommon-x11-dev \
+            libvulkan1 mesa-vulkan-drivers xvfb xdotool
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: "1.99.1", components: "rustfmt,clippy" }
+      - uses: arduino/setup-task@v2
+        with: { version: 3.x }
+      - uses: Swatinem/rust-cache@v2
+      - run: task check
+      # Browser-engine regressions need a display (software Vulkan via lavapipe):
+      # per-app profile isolation + restart persistence, and the mock OIDC login flow.
+      - run: xvfb-run -a task test:isolation
+      - run: xvfb-run -a task test:oidc
+
+  metadata:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y desktop-file-utils appstream
+      - run: desktop-file-validate packaging/io.github.rpietzsch.GPUIdium.desktop
+      - run: appstreamcli validate --no-net packaging/io.github.rpietzsch.GPUIdium.metainfo.xml

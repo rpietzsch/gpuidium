@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.rpietzsch.GPUIdium</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>GPUIdium</name>
+  <summary>A minimal workspace for arbitrary websites</summary>
+  <description>
+    <p>
+      GPUIdium keeps your web apps in a narrow icon sidebar. Paste an address and it becomes
+      a persistent entry with its own isolated browser profile, so two entries for the same site
+      can be signed in as different users.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Every app has its own cookies, storage and cache, kept separate from all others</li>
+      <li>No recipe catalog, no account, no telemetry</li>
+      <li>Page favicons in the sidebar, keyboard-first navigation, drag to reorder</li>
+      <li>Optional, off by default: unload idle apps, page notifications</li>
+    </ul>
+    <p>The page content is rendered by the system's WebKitGTK. On Linux, GPUIdium currently runs on X11 or XWayland.</p>
+  </description>
+  <launchable type="desktop-id">io.github.rpietzsch.GPUIdium.desktop</launchable>
+  <url type="homepage">https://github.com/rpietzsch/gpuidium</url>
+  <url type="bugtracker">https://github.com/rpietzsch/gpuidium/issues</url>
+  <provides>
+    <binary>gpuidium</binary>
+  </provides>
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/rpietzsch/gpuidium/main/docs/screenshots/page.png</image>
+      <caption>An app with its page favicon in the icon sidebar</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/rpietzsch/gpuidium/main/docs/screenshots/manage.png</image>
+      <caption>Managing apps, settings and saved data</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.2.0" date="2026-11-07">
+      <description>
+        <p>First release for Linux (X11 and XWayland).</p>
+      </description>
+    </release>
+  </releases>
+</component>

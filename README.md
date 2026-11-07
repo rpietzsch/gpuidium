@@ -2,7 +2,7 @@
 
 A lightweight, keyboard-friendly [GPUI](https://gpui.rs) shell for web apps. Paste a URL, get a persistent sidebar entry with its own isolated browser profile. No recipe catalog, no telemetry, no account.
 
-**Status:** pre-alpha, in the feasibility phase. See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
+**Status:** 0.2.0, Linux (X11/XWayland) only; Windows and macOS are not supported yet. See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
 
 ## Prerequisites
 
@@ -22,19 +22,31 @@ A lightweight, keyboard-friendly [GPUI](https://gpui.rs) shell for web apps. Pas
 task              # list targets
 task build        # debug build
 task build:release
-task run
+task run          # release build (fast); task run:debug for a debug build
 task test
 task fmt
 task lint         # clippy, warnings denied
 task check        # fmt check + lint + test (the CI gate)
 task clean
+task test:isolation  # needs a display: same-origin profile isolation + restart persistence
+task test:switching  # needs a display + xdotool: app switching keeps pages full size, no relayouts
+task test:oidc       # needs a display: mock OIDC login survives restart, stays per-profile
+task bench           # process-tree memory/CPU baseline (needs display + xdotool)
+task package:linux   # dist/gpuidium-<ver>-linux-x86_64.tar.gz (+ .sha256)
+task release:linux   # package + checksum + optional GPG signature + verification (docs/updates.md)
 ```
+
+Packaging: [`docs/packaging.md`](docs/packaging.md). Changes: [`CHANGELOG.md`](CHANGELOG.md).
+See [`docs/known-limits.md`](docs/known-limits.md) for privacy, isolation limits and login behaviour,
+and [`docs/security-review.md`](docs/security-review.md).
 
 ## Layout
 
 - `crates/gpuidium-core` - GUI-free domain logic: model, URL policy, storage (fully unit-tested).
 - `crates/gpuidium` - GPUI application and feasibility spikes (`src/bin/spike_*.rs`).
-- `docs/` - ADRs and spike reports.
+- `third_party/lb-wry` - vendored Wry fork with a per-profile cache/HSTS patch (`PATCHES.md`).
+- `docs/` - ADRs, limits, security review.
+- `scripts/`, `packaging/` - benchmark harness, Linux packaging.
 
 ## License
 

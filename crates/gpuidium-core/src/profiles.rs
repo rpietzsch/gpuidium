@@ -62,6 +62,27 @@ pub fn orphans(data_dir: &Path, known: &[ProfileId]) -> io::Result<Vec<ProfileId
     Ok(out)
 }
 
+/// Total size in bytes of a profile directory (PROFILE-011). Symlinks are counted
+/// as links, never followed. Missing profile = 0.
+pub fn disk_usage(data_dir: &Path, id: ProfileId) -> io::Result<u64> {
+    fn walk(p: &Path) -> io::Result<u64> {
+        let m = fs::symlink_metadata(p)?;
+        if m.is_dir() {
+            let mut total = 0;
+            for e in fs::read_dir(p)? {
+                total += walk(&e?.path())?;
+            }
+            Ok(total)
+        } else {
+            Ok(m.len())
+        }
+    }
+    match walk(&profile_dir(data_dir, id)) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(0),
+        r => r,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +136,17 @@ mod tests {
         fs::create_dir_all(d.path().join("profiles").join("not-a-profile")).unwrap();
         assert_eq!(orphans(d.path(), &[kept]).unwrap(), vec![gone]);
         assert!(orphans(&d.path().join("nope"), &[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn disk_usage_sums_files_and_missing_is_zero() {
+        let d = tempfile::tempdir().unwrap();
+        let id = ProfileId::new();
+        assert_eq!(disk_usage(d.path(), id).unwrap(), 0);
+        let p = ensure(d.path(), id).unwrap();
+        fs::create_dir_all(p.join("sub")).unwrap();
+        fs::write(p.join("a"), [0u8; 10]).unwrap();
+        fs::write(p.join("sub/b"), [0u8; 5]).unwrap();
+        assert_eq!(disk_usage(d.path(), id).unwrap(), 15);
     }
 }

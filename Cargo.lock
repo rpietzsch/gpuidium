@@ -3001,21 +3001,25 @@ dependencies = [
 
 [[package]]
 name = "gpuidium"
-version = "0.0.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
+ "async-channel",
+ "cairo-rs",
  "gpui-kit",
  "gpui-webview",
  "gpuidium-core",
  "gtk",
+ "image",
  "lb-wry",
  "thiserror 2.0.21",
  "url",
+ "webkit2gtk",
 ]
 
 [[package]]
 name = "gpuidium-core"
-version = "0.0.1"
+version = "0.2.0"
 dependencies = [
  "fd-lock",
  "idna",
@@ -3893,8 +3897,6 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 [[package]]
 name = "lb-wry"
 version = "0.53.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9cfe72bff8acf9af0d6d276569be5b9cb3f313f9882761ada5a50d3044214d4"
 dependencies = [
  "base64",
  "block2 0.6.2",
@@ -5715,7 +5717,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6673,7 +6675,7 @@ version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32824fab5e16e6c4d86dc1ba84489390419a39f97699852b66480bb87d297ed8"
 dependencies = [
- "dirs 5.0.1",
+ "dirs 6.0.0",
 ]
 
 [[package]]
