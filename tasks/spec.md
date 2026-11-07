@@ -109,6 +109,14 @@ The adapter owns WebViews and contexts with valid lifetimes. Construct native ch
 
 **If isolation is not achievable on any required platform, G1 is NO-GO for a full cross-platform MVP.** Do not degrade to a shared profile, claim a passing release, or substitute Tauri. Pursue a GPUI-compatible native hosting adapter or upstream work and rerun the test matrix.
 
+### Implementation findings (2026-11-07, see `docs/adr-001-gpui-go-no-go.md`)
+
+- **Pinned stack:** `gpui-kit` =0.9.0 (GPUI fork `gpui-pre`), `gpui-webview` =0.9.0, `lb-wry` =0.53.3, Rust 1.99.1.
+- **Linux:** per-profile `WebContext` isolates cookies, localStorage and IndexedDB (verified, including restart). GTK must be initialised before creating a `WebContext`. HTTP cache, CacheStorage and HSTS still land in shared default directories: tracked as PROFILE-004 (P0).
+- **macOS:** per-profile stores need `with_data_store_identifier` (WKWebsiteDataStore), so the minimum is **macOS 14** unless a fallback is found. Unverified.
+- **Windows:** one WebView2 user-data folder per profile via `WebContext`. Unverified.
+- **Shortcuts:** the GPUI fork has no `secondary` modifier; bindings use `cmd` on macOS and `ctrl` elsewhere.
+
 ### Navigation and security
 
 - Treat every page as untrusted. Disable arbitrary page-to-native IPC; **do not add a JavaScript bridge in MVP**.

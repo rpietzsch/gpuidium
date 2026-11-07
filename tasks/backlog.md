@@ -6,6 +6,32 @@
 **Suggested tracking fields:** ID, priority, owner, status, estimate, dependencies, PR link, evidence (screenshot/video/test).  
 **Estimates:** S (≤1 day), M (2–3 days), L (4–7 days), XL (research/unknown); exploratory estimates are not commitments.
 
+## Progress (updated as work lands)
+
+| Item | Status | Evidence |
+|---|---|---|
+| SPIKE-001 | **Done** | Pins in `Cargo.toml`/`rust-toolchain.toml`, `Cargo.lock`; ADR-001 version table |
+| BUILD-001 | **Done** (Linux verified; Win/macOS targets untested) | `Taskfile.yml`, README |
+| SPIKE-004 | **Partial** - Xwayland session verified; pure X11, DPI, focus/resize/100-switch not yet | ADR-001 |
+| SPIKE-005 | **Partial** - Linux PASS (cookie/localStorage/IndexedDB, restart); macOS/Windows need hardware | `spike_isolation`, ADR-001 |
+| SPIKE-002, SPIKE-003 | **Blocked** - need macOS / Windows machines | - |
+| SPIKE-006, SPIKE-007 | **Open** - ADR-001 is PROVISIONAL | ADR-001 |
+| CORE-001, CORE-002, CORE-003 | **Done** (unit tests; fuzz-style URL sweep) | `crates/gpuidium-core` |
+| CORE-004 | **Done** - `WebviewHost` trait + Wry adapter; native types never reach the domain model | `crates/gpuidium/src/host.rs` |
+| CORE-005 | **Done on Linux** - lazy create, hide-all-then-show-one, 102 keyboard switches without crash; Win/macOS unverified | manual smoke, 2026-11-07 |
+| CORE-006 | **Partial** - back/forward/reload/home/origin/loading shown; **no load-failure state yet** (Wry has no failure callback; needs a workaround) | `main.rs` |
+| CORE-007 | **Done** - policy in core (tests), enforced via Wry navigation + new-window handlers, no IPC handler registered | `policy.rs`, `host.rs` |
+| PROFILE-001 | **Done on Linux** - one `WebContext` + data dir per `ProfileId`, never shared | `host.rs`, `profiles.rs` |
+| PROFILE-002 | **Partial** - automated same-origin test passes on Linux (`spike_isolation`); not yet a CI regression test; Win/macOS missing | ADR-001 |
+| PROFILE-003 | **Done on Linux** - default keep-data, explicit delete scoped to one profile (symlink-safe, tested); orphan listing exists, no purge UI yet | `profiles.rs`, `main.rs` |
+| UI-001 | **Done on Linux** - sidebar, selection, empty state, no overlays above the native pane | screenshots |
+| UI-002 | **Partial** - add (with URL diagnostics) and remove (inline keep/delete confirmation) done; **rename/edit-URL UI missing** | `main.rs` |
+| UI-003 | **Partial** - Ctrl/Cmd+L/R/1-9 and Alt+Left/Right work; screen-reader labels and focus-return not verified; Ctrl+W deliberately unbound | `main.rs` |
+| UI-004 | **Done** - monogram avatar, move up/down | `main.rs` |
+| CORE-008 | **Done on Linux** - list/order/active/profile mapping restored after restart | manual test |
+| CORE-009 | **Done** - single-instance lock, opt-in `GPUIDIUM_LOG` with URL redaction, config-corruption notice | `instance.rs`, `diagnostics.rs` |
+| PROFILE-004 (new, P0) | **Open** - per-profile HTTP cache / HSTS on Linux (found by SPIKE-005); verify equivalents on macOS/Windows | ADR-001 finding 2 |
+
 ## Definition of done (all tickets)
 
 - Code reviewed, `cargo fmt`, `cargo clippy`, tests relevant to changed modules, and no leaked credentials in logs.
@@ -38,6 +64,7 @@
 | CORE-003 | M | Storage schema v1 + atomic config writes | Persist unique `profile_id` per AppId; robust roundtrip, versioning, backup, corrupt-config recovery; config stored in OS paths without browser secrets | CORE-001 |
 | PROFILE-001 | L | **Isolated persistent profile manager (P0)** | AppId maps 1:1 to opaque profile ID; create/open/suspend/close per-app data store through OS-specific backend; never reuse a store between entries | SPIKE-005,CORE-001,CORE-004 |
 | PROFILE-002 | M | **Same-origin isolation regression tests (P0)** | Two entries for identical URL keep distinct cookies/localStorage and independent logins before/after restart on Win11, macOS and Linux X11/XWayland; no shared-store fallback | PROFILE-001 |
+| PROFILE-004 | M | **Per-profile HTTP cache / HSTS isolation (P0)** | Cache, CacheStorage and HSTS stores live under the profile dir (or are disabled) on Linux; equivalent verified on macOS/Windows; regression test that a cached/HSTS entry in A is not visible in B | SPIKE-005 |
 | PROFILE-003 | M | **Profile retention and deletion safety (P0)** | Default remove retains browsing data with notice; explicit delete-data action cleans only selected closed profile; errors/retry/orphan cleanup documented; no cross-profile deletion | PROFILE-001,CORE-003 |
 | CORE-004 | M | WebviewHost trait and gpui-webview adapter | No native Wry resource in domain model; owns lifetimes; callbacks correctly hop to GPUI UI thread | SPIKE-007,CORE-001 |
 | CORE-005 | L | Native WebView lifecycle for multiple entries | Create, show, hide, destroy; re-render does not recreate views; each view is attached to its own PROFILE-001 storage partition; 100 switches smoke | CORE-004,PROFILE-001 |
