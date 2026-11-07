@@ -5,6 +5,8 @@
 //! drains it and applies state changes on the GPUI side.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 
 use gpui_kit::{App, AppContext as _, Entity, Window};
@@ -19,10 +21,62 @@ use wry::{NewWindowResponse, PageLoadEvent, WebContext, WebViewBuilder};
 
 use crate::external;
 
+/// App-level shortcuts. WebKit owns keyboard focus while a page is shown, so GPUI's
+/// key bindings never see these; the host intercepts them natively and forwards them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shortcut {
+    Open,
+    Reload,
+    Manage,
+    Keys,
+    Select(usize),
+    Back,
+    Forward,
+}
+
+#[cfg(target_os = "linux")]
+fn shortcut_for(ev: &gtk::gdk::EventKey) -> Option<Shortcut> {
+    use gtk::gdk::{ModifierType as M, keys::constants as k};
+    let st = ev.state();
+    let key = ev.keyval().to_lower();
+    if key == k::F1 {
+        return Some(Shortcut::Keys);
+    }
+    if st.contains(M::MOD1_MASK) && !st.contains(M::CONTROL_MASK) {
+        return match key {
+            k::Left => Some(Shortcut::Back),
+            k::Right => Some(Shortcut::Forward),
+            _ => None,
+        };
+    }
+    if !st.contains(M::CONTROL_MASK) || st.contains(M::MOD1_MASK) {
+        return None;
+    }
+    match key {
+        k::l | k::k => Some(Shortcut::Open),
+        k::r => Some(Shortcut::Reload),
+        k::comma => Some(Shortcut::Manage),
+        k::question | k::slash if st.contains(M::SHIFT_MASK) || key == k::question => {
+            Some(Shortcut::Keys)
+        }
+        _ => {
+            let n = key.to_unicode()?.to_digit(10)? as usize;
+            (1..=9).contains(&n).then(|| Shortcut::Select(n - 1))
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum HostEvent {
+    Shortcut(Shortcut),
+    /// The page's favicon as PNG bytes (bounded size).
+    Favicon(AppId, Vec<u8>),
     LoadStarted(AppId, String),
     LoadFinished(AppId, String),
+    /// The engine reported a load failure (URL redacted, short reason).
+    LoadFailed(AppId, String, String),
+    /// A page asked for a desktop notification and the user opted in (UX-013).
+    Notify(AppId, String, String),
     Title(AppId, String),
     /// A navigation was refused by policy (URL already redacted).
     Blocked(String),
@@ -70,6 +124,8 @@ struct Hosted {
 
 pub struct WryHost {
     data_dir: std::path::PathBuf,
+    /// Global opt-in for page notifications (default off: requests are denied).
+    notifications: Arc<AtomicBool>,
     views: HashMap<AppId, Hosted>,
     tx: SyncSender<HostEvent>,
     rx: Receiver<HostEvent>,
@@ -80,10 +136,19 @@ impl WryHost {
         let (tx, rx) = sync_channel(256);
         Self {
             data_dir,
+            notifications: Arc::new(AtomicBool::new(false)),
             views: HashMap::new(),
             tx,
             rx,
         }
+    }
+
+    pub fn set_notifications(&self, on: bool) {
+        self.notifications.store(on, Ordering::Relaxed);
+    }
+
+    pub fn ids(&self) -> Vec<AppId> {
+        self.views.keys().copied().collect()
     }
 
     pub fn view(&self, app: AppId) -> Option<Entity<WebView>> {
@@ -148,6 +213,90 @@ impl WebviewHost for WryHost {
 
         let webview =
             WebView::build(builder, window, cx).map_err(|e| HostError::Native(e.to_string()))?;
+        #[cfg(target_os = "linux")]
+        {
+            use webkit2gtk::WebViewExt as _;
+            use wry::WebViewExtUnix as _;
+            let t_fail = self.tx.clone();
+            webview
+                .raw()
+                .webview()
+                .connect_load_failed(move |_, _, uri, err| {
+                    let _ = t_fail.try_send(HostEvent::LoadFailed(
+                        app,
+                        uri.to_string(),
+                        err.message().to_string(),
+                    ));
+                    true // handled: no WebKit error page, the shell renders its own error state
+                });
+        }
+        #[cfg(target_os = "linux")]
+        {
+            use gtk::glib::ObjectExt as _;
+            use gtk::prelude::WidgetExt as _;
+            use webkit2gtk::{PermissionRequestExt as _, WebViewExt as _};
+            use wry::WebViewExtUnix as _;
+            let gtk_view = webview.raw().webview();
+            let t_icon = self.tx.clone();
+            gtk_view.connect_favicon_notify(move |v| {
+                let Some(surface) = v.favicon() else {
+                    log("favicon notify: none");
+                    return;
+                };
+                match gtk::cairo::ImageSurface::try_from(surface) {
+                    Ok(img) => {
+                        let mut png = Vec::new();
+                        match img.write_to_png(&mut png) {
+                            Ok(()) if png.len() <= 256 * 1024 => {
+                                log(&format!("favicon: {} bytes", png.len()));
+                                let _ = t_icon.try_send(HostEvent::Favicon(app, png));
+                            }
+                            Ok(()) => log("favicon too large, ignored"),
+                            Err(e) => log(&format!("favicon png encode failed: {e}")),
+                        }
+                    }
+                    Err(_) => log("favicon is not an image surface"),
+                }
+            });
+            let t_key = self.tx.clone();
+            gtk_view.connect_key_press_event(move |_, ev| match shortcut_for(ev) {
+                Some(sc) => {
+                    let _ = t_key.try_send(HostEvent::Shortcut(sc));
+                    gtk::glib::Propagation::Stop
+                }
+                None => gtk::glib::Propagation::Proceed,
+            });
+            // Every permission (camera, location, ...) is denied; only notifications
+            // may be allowed, and only while the user's global opt-in is on.
+            let flag = self.notifications.clone();
+            gtk_view.connect_permission_request(move |_, req| {
+                let is_notification = req.is::<webkit2gtk::NotificationPermissionRequest>();
+                log(&format!(
+                    "permission request {}: notification={is_notification} opted_in={}",
+                    req.type_().name(),
+                    flag.load(Ordering::Relaxed)
+                ));
+                if is_notification && flag.load(Ordering::Relaxed) {
+                    req.allow();
+                } else {
+                    req.deny();
+                }
+                true
+            });
+            let (flag, t_note) = (self.notifications.clone(), self.tx.clone());
+            gtk_view.connect_show_notification(move |_, n| {
+                if flag.load(Ordering::Relaxed) {
+                    use webkit2gtk::NotificationExt as _;
+                    let clip = |s: Option<webkit2gtk::glib::GString>| {
+                        s.map(|g| g.chars().take(200).collect::<String>())
+                            .unwrap_or_default()
+                    };
+                    let _ =
+                        t_note.try_send(HostEvent::Notify(app, clip(n.title()), clip(n.body())));
+                }
+                true
+            });
+        }
         log(&format!("created webview for {app}"));
         let view = cx.new(|_| webview);
         self.views.insert(
@@ -169,8 +318,16 @@ impl WebviewHost for WryHost {
     fn show_only(&mut self, cx: &mut App, app: Option<AppId>) {
         for (id, h) in &self.views {
             let visible = Some(*id) == app;
-            h.view
-                .update(cx, |w, _| if visible { w.show() } else { w.hide() });
+            h.view.update(cx, |w, _| {
+                if visible {
+                    w.show();
+                } else {
+                    // A hidden WebKit view must not keep keyboard focus, or GPUI never
+                    // sees Esc or typing in the Open panel.
+                    let _ = w.raw().focus_parent();
+                    w.hide();
+                }
+            });
         }
     }
 

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="GPUIdium">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2b1b5e"/>
+      <stop offset="1" stop-color="#6d3df2"/>
+    </linearGradient>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#cdbfff"/>
+    </linearGradient>
+  </defs>
+  <!-- app tile -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <!-- faint 2x2 "multiple web apps" grid behind the letter -->
+  <g fill="#ffffff" opacity="0.07">
+    <rect x="72" y="72" width="168" height="168" rx="28"/>
+    <rect x="272" y="72" width="168" height="168" rx="28"/>
+    <rect x="72" y="272" width="168" height="168" rx="28"/>
+    <rect x="272" y="272" width="168" height="168" rx="28"/>
+  </g>
+  <!-- jagged R: straight stem, saw-tooth bowl and leg -->
+  <path fill="url(#fg)" fill-rule="evenodd" d="
+    M150 112 H296 L344 132 L326 160 L362 182 L338 212 L368 238 L322 266 L292 278
+    L372 400 H300 L236 298 H222 V400 H150 Z
+    M222 172 V236 H278 L304 218 L286 200 L300 184 L274 172 Z"/>
+  <!-- shard highlight -->
+  <path d="M150 112 H296 L344 132 L150 200 Z" fill="#ffffff" opacity="0.18"/>
+</svg>

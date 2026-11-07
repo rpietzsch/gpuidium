@@ -40,7 +40,28 @@ pub fn data_dir() -> Option<PathBuf> {
     Some(base.join(APP_DIR))
 }
 
+/// Cached favicon (PNG) for one app, outside the browser profile and named by app id only.
+pub fn favicon_file(data_dir: &std::path::Path, id: crate::model::AppId) -> PathBuf {
+    data_dir.join("favicons").join(format!("{id}.png"))
+}
+
 /// Per-profile data directory. Named only by the opaque profile id, never by URL.
 pub fn profile_dir(data_dir: &std::path::Path, id: ProfileId) -> PathBuf {
     data_dir.join("profiles").join(id.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::AppId;
+
+    #[test]
+    fn favicon_file_is_keyed_by_app_id_only() {
+        let id = AppId::new();
+        let f = favicon_file(std::path::Path::new("/d"), id);
+        assert_eq!(
+            f,
+            std::path::Path::new("/d/favicons").join(format!("{id}.png"))
+        );
+    }
 }

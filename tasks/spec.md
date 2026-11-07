@@ -47,9 +47,13 @@ A user may enter an **IRI** (Internationalized Resource Identifier), including U
 
 **Empty state:** “Add a web app” URL field with an example. Return validates, adds the app, creates its view, and navigates.
 
-**Sidebar:** app icon (use a generated monogram initially; website favicons only if safely fetched later), editable display name, drag/drop ordering optional after MVP, active highlight, add button, remove action with confirmation.
+**Sidebar:** 40 px rail of 28 px tiles showing the page's own favicon (WebKit-provided, cached per app, no GPUIdium network fetch); a monogram is only the fallback. The app icon is shown by the window manager (title bar, task bar), not repeated in the sidebar.
 
-**Toolbar:** back, forward, reload, URL/origin information, open externally. A single instance takes the content pane; switching must hide the previous child WebView before showing the next; no stale view may cover GPUI chrome.
+**Sidebar (earlier text):** app icon (monogram initially; favicons later), editable display name, drag/drop ordering optional after MVP, active highlight, add button, remove action with confirmation.
+
+**Revised UX (owner draft 2026-11-07, supersedes the toolbar below):** narrow icon sidebar and full-height web content; no persistent address or button bar. The IRI field appears only in the Open panel (Ctrl/Cmd+L or K, or +) and disappears after Enter; typing a name instead filters existing apps. Panels (Open, Manage, Shortcuts, load-error) temporarily replace the native view. Ctrl/Cmd+? or F1 shows the shortcut sheet; Esc closes a panel. Navigation is keyboard-only (Alt+Left/Right, Ctrl/Cmd+R). Manage (Ctrl/Cmd+,) holds edit/reorder/remove, opt-in settings (unload inactive apps, page notifications), retained data and export/import. Shortcuts are intercepted natively because WebKit holds keyboard focus. Legacy text follows.
+
+**Toolbar (legacy):** back, forward, reload, URL/origin information, open externally. A single instance takes the content pane; switching must hide the previous child WebView before showing the next; no stale view may cover GPUI chrome.
 
 **Keyboard MVP:** Ctrl/Cmd+L (focus add/navigate URL field), Ctrl/Cmd+R (reload), Ctrl/Cmd+1…9 (switch first nine apps), Ctrl/Cmd+W (close active app **with confirmation**, or avoid binding if platform semantics conflict). Esc returns focus to content where appropriate. Accessibility: visible focus indicator, labeled controls, keyboard traversal, OS screen-reader smoke test.
 
@@ -115,6 +119,11 @@ The adapter owns WebViews and contexts with valid lifetimes. Construct native ch
 - **Linux:** per-profile `WebContext` isolates cookies, localStorage and IndexedDB (verified, including restart). GTK must be initialised before creating a `WebContext`. HTTP cache, CacheStorage and HSTS still land in shared default directories: tracked as PROFILE-004 (P0).
 - **macOS:** per-profile stores need `with_data_store_identifier` (WKWebsiteDataStore), so the minimum is **macOS 14** unless a fallback is found. Unverified.
 - **Windows:** one WebView2 user-data folder per profile via `WebContext`. Unverified.
+- **Editing:** an app's display name and start URL can be edited inline; the URL is re-validated by the core and the app's `profile_id` never changes.
+- **Cache/HSTS (PROFILE-004, Linux):** `third_party/lb-wry` is patched so cache, DOM cache, HSTS and ITP also live in the profile directory.
+- **Load failure:** WebKit's `load-failed` signal surfaces as a toolbar error line; reload retries.
+- **Login persistence (Linux, tested with a mock OIDC flow):** cookies with an expiry survive restarts; session-only cookies do not (WebKitGTK); popup-based logins go to the system browser and cannot return. See `docs/known-limits.md`.
+- **Data management:** retained profiles listed with size and deletable individually; app list export/import carries names and URLs only.
 - **Shortcuts:** the GPUI fork has no `secondary` modifier; bindings use `cmd` on macOS and `ctrl` elsewhere.
 
 ### Navigation and security

@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+# Same major as gpui (window icon type); PNG decode only.
+image = { version = "0.25", default-features = false, features = ["png"] }
 thiserror.workspace = true
 url.workspace = true
 gpuidium-core = { path = "../gpuidium-core" }
@@ -17,3 +19,6 @@ wry = { version = "=0.53.3", package = "lb-wry" }
 [target.'cfg(target_os = "linux")'.dependencies]
 # Same major as gpui-webview; needed to init GTK before creating per-profile WebContexts.
 gtk = "0.18"
+webkit2gtk = "2.0"
+# PNG encode/decode for favicons and the window icon (feature unifies with gtk's cairo).
+cairo-rs = { version = "0.18", features = ["png"] }

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GPUIdium
+Comment=Web apps with isolated profiles
+Exec=gpuidium
+Icon=gpuidium
+Categories=Network;WebBrowser;
+Terminal=false
+StartupWMClass=gpuidium

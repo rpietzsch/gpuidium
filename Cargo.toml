@@ -15,3 +15,7 @@ serde_json = "1"
 thiserror = "2"
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+
+# PROFILE-004: lb-wry 0.53.3 with per-profile cache/HSTS dirs on Linux (third_party/lb-wry/PATCHES.md).
+[patch.crates-io]
+lb-wry = { path = "third_party/lb-wry" }

@@ -26,3 +26,27 @@ pub fn open(url: &str) -> bool {
         .spawn()
         .is_ok()
 }
+
+/// Show a desktop notification through `notify-send` (Linux). Title/body are passed as
+/// separate arguments after `--`, never through a shell. Returns false if it cannot run.
+pub fn notify(app: &str, title: &str, body: &str) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let clip = |s: &str| s.chars().take(200).collect::<String>();
+        Command::new("notify-send")
+            .arg("--app-name=GPUIdium")
+            .arg("--")
+            .arg(clip(&format!("{app}: {title}")))
+            .arg(clip(body))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .is_ok()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, title, body);
+        false
+    }
+}

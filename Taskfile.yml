@@ -56,3 +56,45 @@ tasks:
       - task: fmt:check
       - task: lint
       - task: test
+
+  test:isolation:
+    desc: Same-origin profile isolation + restart persistence (needs a display; PROFILE-002/004)
+    cmds:
+      - cargo build -q -p gpuidium --bin spike_isolation
+      - cmd: |
+          R=$(mktemp -d)
+          target/debug/spike_isolation "$R"
+          target/debug/spike_isolation "$R" --expect-persisted
+          # PROFILE-004: nothing may land in shared per-user default dirs.
+          ! test -e "$HOME/.cache/spike_isolation" && ! test -e "$HOME/.local/share/spike_isolation"
+        platforms: [linux]
+
+  test:oidc:
+    desc: Mock OIDC login flow persists across restart and stays per-profile (needs a display)
+    cmds:
+      - cargo build -q -p gpuidium --bin spike_oidc
+      - cmd: |
+          R=$(mktemp -d)
+          target/debug/spike_oidc "$R" --expect login
+          target/debug/spike_oidc "$R" --expect rp
+          target/debug/spike_oidc "$R" --profile other --expect login
+          target/debug/spike_oidc "$R" --expect rp
+        platforms: [linux]
+
+  bench:
+    desc: Process-tree memory/CPU baseline (Linux, needs display + xdotool)
+    cmds:
+      - cargo build --release -p gpuidium
+      - python3 scripts/bench.py {{.CLI_ARGS}}
+
+  package:linux:
+    desc: Build dist/gpuidium-<ver>-linux-x86_64.tar.gz
+    cmds:
+      - scripts/package-linux.sh
+    platforms: [linux]
+
+  release:linux:
+    desc: Package, checksum and (with GPUIDIUM_SIGN_KEY set) GPG-sign the Linux tarball, then verify it
+    cmds:
+      - scripts/release-linux.sh
+    platforms: [linux]

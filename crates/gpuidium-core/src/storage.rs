@@ -32,6 +32,17 @@ impl Default for WindowConfig {
     }
 }
 
+/// User options (all off by default; additive, so schema stays at v1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    /// LIFE-010: close the native view of apps inactive for this many minutes.
+    /// Persistent cookies/storage survive; in-page state does not.
+    pub unload_inactive_minutes: Option<u32>,
+    /// UX-013: let pages show desktop notifications (opt-in, global).
+    pub notifications: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub schema_version: u32,
@@ -41,6 +52,8 @@ pub struct Config {
     pub active_app_id: Option<AppId>,
     #[serde(default)]
     pub window: WindowConfig,
+    #[serde(default)]
+    pub settings: Settings,
 }
 
 impl Default for Config {
@@ -50,6 +63,7 @@ impl Default for Config {
             apps: Vec::new(),
             active_app_id: None,
             window: WindowConfig::default(),
+            settings: Settings::default(),
         }
     }
 }
@@ -81,6 +95,7 @@ impl Config {
             apps: state.apps().to_vec(),
             active_app_id: state.active(),
             window,
+            settings: Settings::default(),
         }
     }
 
@@ -238,6 +253,14 @@ pub fn load(dir: &Path) -> Result<Loaded, StorageError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn settings_default_off_and_old_configs_still_load() {
+        let old = br#"{"schema_version":1,"apps":[],"active_app_id":null}"#;
+        let c = super::Config::parse(old).unwrap();
+        assert_eq!(c.settings, super::Settings::default());
+        assert!(!c.settings.notifications && c.settings.unload_inactive_minutes.is_none());
+    }
+
     use super::*;
     use crate::model::{Command, ProfileId};
 

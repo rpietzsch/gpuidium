@@ -28,13 +28,23 @@ task fmt
 task lint         # clippy, warnings denied
 task check        # fmt check + lint + test (the CI gate)
 task clean
+task test:isolation  # needs a display: same-origin profile isolation + restart persistence
+task test:oidc       # needs a display: mock OIDC login survives restart, stays per-profile
+task bench           # process-tree memory/CPU baseline (needs display + xdotool)
+task package:linux   # dist/gpuidium-<ver>-linux-x86_64.tar.gz (+ .sha256)
+task release:linux   # package + checksum + optional GPG signature + verification (docs/updates.md)
 ```
+
+See [`docs/known-limits.md`](docs/known-limits.md) for privacy, isolation limits and login behaviour,
+and [`docs/security-review.md`](docs/security-review.md).
 
 ## Layout
 
 - `crates/gpuidium-core` - GUI-free domain logic: model, URL policy, storage (fully unit-tested).
 - `crates/gpuidium` - GPUI application and feasibility spikes (`src/bin/spike_*.rs`).
-- `docs/` - ADRs and spike reports.
+- `third_party/lb-wry` - vendored Wry fork with a per-profile cache/HSTS patch (`PATCHES.md`).
+- `docs/` - ADRs, limits, security review.
+- `scripts/`, `packaging/` - benchmark harness, Linux packaging.
 
 ## License
 
