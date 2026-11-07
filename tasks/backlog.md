@@ -16,7 +16,20 @@
 | SPIKE-005 | **Partial** - Linux PASS (cookie/localStorage/IndexedDB, restart); macOS/Windows need hardware | `spike_isolation`, ADR-001 |
 | SPIKE-002, SPIKE-003 | **Blocked** - need macOS / Windows machines | - |
 | SPIKE-006, SPIKE-007 | **Open** - ADR-001 is PROVISIONAL | ADR-001 |
-| CORE-001, CORE-002, CORE-003 | **Done** (29 unit tests; fuzz-style URL sweep) | `crates/gpuidium-core` |
+| CORE-001, CORE-002, CORE-003 | **Done** (unit tests; fuzz-style URL sweep) | `crates/gpuidium-core` |
+| CORE-004 | **Done** - `WebviewHost` trait + Wry adapter; native types never reach the domain model | `crates/gpuidium/src/host.rs` |
+| CORE-005 | **Done on Linux** - lazy create, hide-all-then-show-one, 102 keyboard switches without crash; Win/macOS unverified | manual smoke, 2026-11-07 |
+| CORE-006 | **Partial** - back/forward/reload/home/origin/loading shown; **no load-failure state yet** (Wry has no failure callback; needs a workaround) | `main.rs` |
+| CORE-007 | **Done** - policy in core (tests), enforced via Wry navigation + new-window handlers, no IPC handler registered | `policy.rs`, `host.rs` |
+| PROFILE-001 | **Done on Linux** - one `WebContext` + data dir per `ProfileId`, never shared | `host.rs`, `profiles.rs` |
+| PROFILE-002 | **Partial** - automated same-origin test passes on Linux (`spike_isolation`); not yet a CI regression test; Win/macOS missing | ADR-001 |
+| PROFILE-003 | **Done on Linux** - default keep-data, explicit delete scoped to one profile (symlink-safe, tested); orphan listing exists, no purge UI yet | `profiles.rs`, `main.rs` |
+| UI-001 | **Done on Linux** - sidebar, selection, empty state, no overlays above the native pane | screenshots |
+| UI-002 | **Partial** - add (with URL diagnostics) and remove (inline keep/delete confirmation) done; **rename/edit-URL UI missing** | `main.rs` |
+| UI-003 | **Partial** - Ctrl/Cmd+L/R/1-9 and Alt+Left/Right work; screen-reader labels and focus-return not verified; Ctrl+W deliberately unbound | `main.rs` |
+| UI-004 | **Done** - monogram avatar, move up/down | `main.rs` |
+| CORE-008 | **Done on Linux** - list/order/active/profile mapping restored after restart | manual test |
+| CORE-009 | **Done** - single-instance lock, opt-in `GPUIDIUM_LOG` with URL redaction, config-corruption notice | `instance.rs`, `diagnostics.rs` |
 | PROFILE-004 (new, P0) | **Open** - per-profile HTTP cache / HSTS on Linux (found by SPIKE-005); verify equivalents on macOS/Windows | ADR-001 finding 2 |
 
 ## Definition of done (all tickets)

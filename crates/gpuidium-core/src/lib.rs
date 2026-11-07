@@ -1,7 +1,11 @@
 //! GUI-free domain logic for GPUIdium: typed app state, URL policy and storage.
 
+pub mod diagnostics;
+pub mod instance;
 pub mod model;
 pub mod paths;
+pub mod policy;
+pub mod profiles;
 pub mod storage;
 pub mod uri;
 
