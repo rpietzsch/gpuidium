@@ -33,6 +33,12 @@ First usable release, for Linux (X11 and XWayland). Windows and macOS are not su
 - Test tooling: same-origin isolation test, mock OIDC login flow test, memory/CPU benchmark
   harness, signed-release and verification scripts.
 
+### Performance
+- Native events (shortcuts, page loads, favicons) are handled immediately instead of on a 100 ms timer: key press to visible page about 107 ms to 58 ms (median).
+- No redundant move/resize/show calls to the web view on every shell redraw (about 20 per second while hovering the sidebar, now none).
+- Pages are focused after switching apps, so the text caret is visible.
+- `task run` builds in release mode (about 1.7x faster to first paint than debug). See `docs/performance.md`.
+
 ### Security
 - Only `https` (and `http` for loopback) addresses are accepted; `javascript:`, `file:`, `data:`
   and credentials in URLs are rejected. Popups never open inside the app; there is no

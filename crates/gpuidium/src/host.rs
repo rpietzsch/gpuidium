@@ -4,10 +4,10 @@
 //! the UI thread and only push `HostEvent`s into a bounded channel; the shell
 //! drains it and applies state changes on the GPUI side.
 
+use async_channel::{Receiver, Sender};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 
 use gpui_kit::{App, AppContext as _, Entity, Window};
 use gpui_webview::WebView;
@@ -150,7 +150,9 @@ pub trait WebviewHost {
     fn reload(&mut self, cx: &mut App, app: AppId);
     /// Close the native view and release its profile store.
     fn close(&mut self, app: AppId);
-    fn drain_events(&mut self) -> Vec<HostEvent>;
+    /// Stream of native events. Awaiting it wakes the UI as soon as a callback sends, instead
+    /// of polling on a timer.
+    fn events(&self) -> Receiver<HostEvent>;
 }
 
 struct Hosted {
@@ -168,13 +170,13 @@ pub struct WryHost {
     /// so only real changes may reach the native view (repeated show/hide/focus calls make
     /// pages repaint and steal focus).
     applied: HashMap<AppId, bool>,
-    tx: SyncSender<HostEvent>,
+    tx: Sender<HostEvent>,
     rx: Receiver<HostEvent>,
 }
 
 impl WryHost {
     pub fn new(data_dir: std::path::PathBuf) -> Self {
-        let (tx, rx) = sync_channel(256);
+        let (tx, rx) = async_channel::bounded(256);
         Self {
             data_dir,
             notifications: Arc::new(AtomicBool::new(false)),
@@ -422,7 +424,7 @@ impl WebviewHost for WryHost {
         self.applied.remove(&app);
     }
 
-    fn drain_events(&mut self) -> Vec<HostEvent> {
-        self.rx.try_iter().collect()
+    fn events(&self) -> Receiver<HostEvent> {
+        self.rx.clone()
     }
 }

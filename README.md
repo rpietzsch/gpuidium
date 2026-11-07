@@ -22,7 +22,7 @@ A lightweight, keyboard-friendly [GPUI](https://gpui.rs) shell for web apps. Pas
 task              # list targets
 task build        # debug build
 task build:release
-task run
+task run          # release build (fast); task run:debug for a debug build
 task test
 task fmt
 task lint         # clippy, warnings denied

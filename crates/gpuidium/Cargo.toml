@@ -12,6 +12,7 @@ license.workspace = true
 anyhow.workspace = true
 # Same major as gpui (window icon type); PNG decode only.
 image = { version = "0.25", default-features = false, features = ["png"] }
+async-channel = "2"
 thiserror.workspace = true
 url.workspace = true
 gpuidium-core = { path = "../gpuidium-core" }

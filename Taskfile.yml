@@ -26,7 +26,12 @@ tasks:
       - cargo build --workspace --release
 
   run:
-    desc: Run the GPUIdium app
+    desc: Run the GPUIdium app (release build: a debug build starts ~1.7x slower)
+    cmds:
+      - cargo run --release -p gpuidium --bin gpuidium -- {{.CLI_ARGS}}
+
+  run:debug:
+    desc: Run the GPUIdium app as a debug build
     cmds:
       - cargo run -p gpuidium --bin gpuidium -- {{.CLI_ARGS}}
 

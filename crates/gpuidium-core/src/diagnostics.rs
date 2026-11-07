@@ -4,7 +4,17 @@
 //! `scheme://host[:port]/path` - no userinfo, query or fragment - and local data
 //! paths are never passed in.
 
+use std::sync::OnceLock;
+use std::time::Instant;
+
 use url::Url;
+
+static START: OnceLock<Instant> = OnceLock::new();
+
+/// Start the clock used for log timestamps (call first thing in `main`).
+pub fn init_clock() {
+    START.get_or_init(Instant::now);
+}
 
 /// Reduce a URL to a form safe for logs.
 pub fn redact_url(raw: &str) -> String {
@@ -26,7 +36,8 @@ pub fn enabled() -> bool {
 /// Log a line to stderr if diagnostics are enabled.
 pub fn log(msg: &str) {
     if enabled() {
-        eprintln!("[gpuidium] {msg}");
+        let ms = START.get_or_init(Instant::now).elapsed().as_millis();
+        eprintln!("[gpuidium +{ms}ms] {msg}");
     }
 }
 

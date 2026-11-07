@@ -88,6 +88,10 @@ pub(crate) struct InnerWebView {
   is_inspector_open: Arc<AtomicBool>,
   pending_scripts: Arc<Mutex<Option<Vec<String>>>>,
   is_in_fixed_parent: bool,
+  // GPUIdium patch: embedders call set_bounds/set_visible on every frame; applying an
+  // unchanged value still costs X requests, GTK relayout and a WebKit resize each time.
+  last_bounds: std::cell::Cell<Option<(i32, i32, i32, i32)>>,
+  last_visible: std::cell::Cell<Option<bool>>,
 
   #[cfg(feature = "x11")]
   x11: Option<X11Data>,
@@ -346,6 +350,8 @@ impl InnerWebView {
       pending_scripts: Arc::new(Mutex::new(Some(Vec::new()))),
 
       is_in_fixed_parent,
+      last_bounds: std::cell::Cell::new(None),
+      last_visible: std::cell::Cell::new(None),
       #[cfg(feature = "x11")]
       x11: None,
 
@@ -862,8 +868,12 @@ impl InnerWebView {
 
   pub fn set_bounds(&self, bounds: Rect) -> Result<()> {
     let scale_factor = self.webview.scale_factor() as f64;
-    let (width, height) = bounds.size.to_logical::<i32>(scale_factor).into();
-    let (x, y) = bounds.position.to_logical::<i32>(scale_factor).into();
+    let (width, height): (i32, i32) = bounds.size.to_logical::<i32>(scale_factor).into();
+    let (x, y): (i32, i32) = bounds.position.to_logical::<i32>(scale_factor).into();
+    if self.last_bounds.get() == Some((x, y, width, height)) {
+      return Ok(());
+    }
+    self.last_bounds.set(Some((x, y, width, height)));
 
     #[cfg(feature = "x11")]
     if let Some(x11_data) = &self.x11 {
@@ -911,6 +921,10 @@ impl InnerWebView {
   }
 
   pub fn set_visible(&self, visible: bool) -> Result<()> {
+    if self.last_visible.get() == Some(visible) {
+      return Ok(());
+    }
+    self.last_visible.set(Some(visible));
     #[cfg(feature = "x11")]
     self.set_visible_x11(visible);
 

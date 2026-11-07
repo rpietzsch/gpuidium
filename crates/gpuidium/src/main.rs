@@ -193,16 +193,22 @@ impl Shell {
             .detach();
         }
 
-        // Drain native events, expire the transient status line, unload idle apps.
+        let host = WryHost::new(data_dir.clone());
+        host.set_notifications(settings.notifications);
+
+        // Native events (shortcuts, loads, titles, favicons) wake the UI the moment they are
+        // sent; no polling, so a shortcut is handled right after the GTK callback returns.
+        let events = host.events();
         cx.spawn_in(window, async move |this, cx| {
-            let mut ticks: u32 = 0;
-            loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(100))
-                    .await;
-                ticks = ticks.wrapping_add(1);
+            while let Ok(first) = events.recv().await {
+                let mut batch = vec![first];
+                while let Ok(more) = events.try_recv() {
+                    batch.push(more);
+                }
                 if this
-                    .update_in(cx, |this, window, cx| this.tick(ticks, window, cx))
+                    .update_in(cx, |this, window, cx| {
+                        this.handle_host_events(batch, window, cx)
+                    })
                     .is_err()
                 {
                     break;
@@ -211,8 +217,21 @@ impl Shell {
         })
         .detach();
 
-        let host = WryHost::new(data_dir.clone());
-        host.set_notifications(settings.notifications);
+        // Slow housekeeping once a second: expire the transient status line, unload idle apps.
+        cx.spawn_in(window, async move |this, cx| {
+            let mut ticks: u32 = 0;
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                ticks = ticks.wrapping_add(1);
+                if this
+                    .update_in(cx, |this, _window, cx| this.tick(ticks, cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
         let first_run = state.apps().is_empty();
         let mut shell = Self {
             state,
@@ -240,7 +259,11 @@ impl Shell {
             focus: cx.focus_handle(),
         };
         shell.load_cached_favicons();
+        log("shell constructed");
+        // Tested and rejected: deferring this until after the first paint shows the sidebar
+        // ~130 ms sooner but delays the page itself by ~75 ms.
         shell.activate_current(window, cx);
+        log("first view created");
         shell
     }
 
@@ -351,8 +374,7 @@ impl Shell {
         }
     }
 
-    fn tick(&mut self, ticks: u32, window: &mut Window, cx: &mut Context<Self>) {
-        self.drain_host_events(window, cx);
+    fn tick(&mut self, ticks: u32, cx: &mut Context<Self>) {
         // Status line is transient: it vanishes five seconds after it last changed.
         if self.status != self.status_seen {
             self.status_seen = self.status.clone();
@@ -363,10 +385,10 @@ impl Shell {
             self.status_seen.clear();
             cx.notify();
         }
-        // LIFE-010: opt-in unloading of long-inactive apps (checked every ~5 s).
+        // LIFE-010: opt-in unloading of long-inactive apps (checked every 5 s).
         // `GPUIDIUM_UNLOAD_SECS` overrides the limit in seconds; it exists only so the
         // behaviour can be tested without waiting minutes.
-        if ticks.is_multiple_of(50) {
+        if ticks.is_multiple_of(5) {
             let test_secs = std::env::var("GPUIDIUM_UNLOAD_SECS")
                 .ok()
                 .and_then(|v| v.parse::<u64>().ok());
@@ -390,11 +412,12 @@ impl Shell {
         }
     }
 
-    fn drain_host_events(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let events = self.host.drain_events();
-        if events.is_empty() {
-            return;
-        }
+    fn handle_host_events(
+        &mut self,
+        events: Vec<HostEvent>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         for ev in events {
             match ev {
                 HostEvent::Shortcut(sc) => match sc {
@@ -422,6 +445,7 @@ impl Shell {
                     p.error = None;
                 }
                 HostEvent::LoadFinished(id, url) => {
+                    log("page load finished");
                     let p = self.pages.entry(id).or_default();
                     p.url = url;
                     p.loading = false;
@@ -1359,6 +1383,10 @@ impl Focusable for Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        {
+            static FIRST: std::sync::Once = std::sync::Once::new();
+            FIRST.call_once(|| log("first render"));
+        }
         if self.want_activate && (self.panel != Panel::None || self.active_error().is_some()) {
             window.activate_window();
             if self.panel != Panel::Open {
@@ -1444,6 +1472,7 @@ impl Render for Shell {
 }
 
 fn main() {
+    gpuidium_core::diagnostics::init_clock();
     let (Some(config_dir), Some(data_dir)) = (paths::config_dir(), paths::data_dir()) else {
         eprintln!("cannot determine per-user config/data directories");
         std::process::exit(1);
