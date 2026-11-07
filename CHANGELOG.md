@@ -6,9 +6,9 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-07
+## [0.2.0] - 2026-11-07
 
-First usable release, for Linux (X11 and XWayland). Windows and macOS are not supported yet.
+First usable release after the 0.0.1 pre-alpha, for Linux (X11 and XWayland). Windows and macOS are not supported yet.
 
 ### Added
 - Narrow icon sidebar with the page's own favicon (monogram only as fallback); no address or
@@ -53,5 +53,5 @@ First usable release, for Linux (X11 and XWayland). Windows and macOS are not su
 - In Flatpak, export and import use fixed files inside the app's config folder (no file
   dialog yet).
 
-[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.1.0
+[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.2.0
