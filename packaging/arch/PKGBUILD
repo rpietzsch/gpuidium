@@ -9,6 +9,9 @@ license=('Apache-2.0')
 # The page engine is the system WebKitGTK, so Arch's own security updates apply.
 depends=('webkit2gtk-4.1' 'gtk3' 'libxkbcommon-x11' 'vulkan-icd-loader' 'xdg-utils')
 makedepends=('cargo' 'pkgconf')
+# makepkg's default LTO flags make the C shims of the Wayland crates unreadable for rust-lld
+# ("undefined symbol: wl_log_trampoline_to_rust_client"); Rust packages on Arch disable it.
+options=('!lto')
 optdepends=('libnotify: fallback for desktop notifications'
             'vulkan-driver: GPU rendering (any Vulkan driver)')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
