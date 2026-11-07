@@ -29,3 +29,11 @@ After "Delete data" the profile directory is removed immediately and again after
 
 ## Testing aid
 `GPUIDIUM_UNLOAD_SECS=<n>` overrides the unload-inactive limit (seconds). It exists only for tests.
+
+## Switching apps on heavy pages
+Some users see a page repaint after about two seconds when switching apps (WebKit drops painted layers while a view is hidden). It was not reproducible with test pages. To help narrow it down, run with one of these and compare:
+```text
+WEBKIT_DISABLE_DMABUF_RENDERER=1 gpuidium
+WEBKIT_DISABLE_COMPOSITING_MODE=1 gpuidium
+```
+Please report the site, your GPU and driver, and which variant changes it.

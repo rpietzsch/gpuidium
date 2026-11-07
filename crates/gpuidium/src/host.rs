@@ -66,6 +66,43 @@ fn shortcut_for(ev: &gtk::gdk::EventKey) -> Option<Shortcut> {
     }
 }
 
+/// Make WebKit treat the page as focused so the text caret is drawn.
+///
+/// `lb-wry` wraps GPUI's own X11 window in a GTK window, but that window's focus events go
+/// to GPUI's connection, so GTK never marks it active and WebKit never marks the page
+/// focused (`document.hasFocus()` stays false, the caret stays hidden). We hand GTK the
+/// focus-in event it would otherwise miss, then focus the web view widget.
+#[cfg(target_os = "linux")]
+fn activate_page(view: &wry::WebView) {
+    use gtk::glib::translate::ToGlibPtr;
+    use gtk::prelude::*;
+    use wry::WebViewExtUnix as _;
+
+    let webview = view.webview();
+    if let Some(top) = webview.toplevel()
+        && let Some(window) = top.window()
+    {
+        let event = gtk::gdk::Event::new(gtk::gdk::EventType::FocusChange);
+        // SAFETY: `event` owns a freshly allocated GdkEventFocus; we only fill its plain
+        // fields (the window reference is transferred to the event, which unrefs it on drop).
+        unsafe {
+            let raw: *mut gtk::gdk::ffi::GdkEventFocus =
+                ToGlibPtr::<*mut gtk::gdk::ffi::GdkEvent>::to_glib_none(&event).0 as *mut _;
+            (*raw).window = window.to_glib_full();
+            (*raw).send_event = 1;
+            (*raw).in_ = 1;
+        }
+        // WebKit listens for `focus-in-event` on the toplevel window; deliver it directly.
+        top.event(&event);
+    }
+    let _ = view.focus();
+}
+
+#[cfg(not(target_os = "linux"))]
+fn activate_page(view: &wry::WebView) {
+    let _ = view.focus();
+}
+
 #[derive(Debug, Clone)]
 pub enum HostEvent {
     Shortcut(Shortcut),
@@ -127,6 +164,10 @@ pub struct WryHost {
     /// Global opt-in for page notifications (default off: requests are denied).
     notifications: Arc<AtomicBool>,
     views: HashMap<AppId, Hosted>,
+    /// Last visibility we applied to each native view. `show_only` runs on every UI event,
+    /// so only real changes may reach the native view (repeated show/hide/focus calls make
+    /// pages repaint and steal focus).
+    applied: HashMap<AppId, bool>,
     tx: SyncSender<HostEvent>,
     rx: Receiver<HostEvent>,
 }
@@ -138,6 +179,7 @@ impl WryHost {
             data_dir,
             notifications: Arc::new(AtomicBool::new(false)),
             views: HashMap::new(),
+            applied: HashMap::new(),
             tx,
             rx,
         }
@@ -313,21 +355,34 @@ impl WebviewHost for WryHost {
         self.views.contains_key(&app)
     }
 
-    /// Hide every native view, then show the selected one: no stale view may
-    /// ever cover GPUI chrome or the active page.
+    /// Show only the selected native view (or none). Applies changes only, in a safe order:
+    /// hide the views that must go, then show the target and give it keyboard focus. Without
+    /// the focus call WebKit treats the page as inactive and never draws the text caret.
     fn show_only(&mut self, cx: &mut App, app: Option<AppId>) {
-        for (id, h) in &self.views {
-            let visible = Some(*id) == app;
-            h.view.update(cx, |w, _| {
-                if visible {
-                    w.show();
-                } else {
-                    // A hidden WebKit view must not keep keyboard focus, or GPUI never
-                    // sees Esc or typing in the Open panel.
-                    let _ = w.raw().focus_parent();
-                    w.hide();
+        let ids: Vec<AppId> = self.views.keys().copied().collect();
+        // Hide first, so no stale view ever covers chrome or the new page.
+        for id in &ids {
+            if Some(*id) != app && self.applied.get(id) != Some(&false) {
+                if let Some(h) = self.views.get(id) {
+                    h.view.update(cx, |w, _| {
+                        // A hidden WebKit view must not keep keyboard focus, or GPUI never
+                        // sees Esc or typing in the Open panel.
+                        let _ = w.raw().focus_parent();
+                        w.hide();
+                    });
                 }
+                self.applied.insert(*id, false);
+            }
+        }
+        if let Some(id) = app
+            && self.applied.get(&id) != Some(&true)
+            && let Some(h) = self.views.get(&id)
+        {
+            h.view.update(cx, |w, _| {
+                w.show();
+                activate_page(w.raw());
             });
+            self.applied.insert(id, true);
         }
     }
 
@@ -364,6 +419,7 @@ impl WebviewHost for WryHost {
     fn close(&mut self, app: AppId) {
         // Dropping the entity and context releases the native view and store.
         self.views.remove(&app);
+        self.applied.remove(&app);
     }
 
     fn drain_events(&mut self) -> Vec<HostEvent> {

@@ -19,3 +19,11 @@ After "Delete data", WebKit's helper processes recreated part of the profile dir
 
 ## Not covered
 Windows and macOS (no hardware); real-world sites for notifications; screen-reader behaviour (UI-003); `deb`/`rpm`/AppImage.
+
+## Page focus and switching (reported by the owner, 2026-11-07)
+**Symptom:** text caret often invisible in web inputs although typing worked.
+**Cause (measured):** after every switch `document.hasFocus()` was `false` and no `focus` event fired. `lb-wry` wraps GPUI's X11 window in a GTK window whose focus events go to GPUI's connection, so GTK never marked the window active and WebKit never marked the page focused. The host also re-applied show/hide on every UI event.
+**Fix:** `show_only` now applies visibility changes only, and when a page is shown the host delivers the missing `focus-in-event` to the GTK toplevel, then focuses the view (`host.rs`, `activate_page`).
+**Result:** after every switch `hasFocus=true` and a `focus` event fires; typing into the input reaches the right page in both apps (tested with real key events).
+
+**Slow re-render after switching (~2 s on real sites):** not reproduced. With test pages (including a 15k-node page with a title changing 4x/s) WebKit produced a frame ~100-200 ms after the switch and the screen showed the correct page by the first sample (~0.9 s) both with and without the old per-event show/hide churn. Likely tied to heavy real sites or the GPU/compositing path; see `docs/known-limits.md` for the A/B recipe.
