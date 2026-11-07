@@ -6,7 +6,11 @@ members = ["crates/gpuidium-core", "crates/gpuidium"]
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/rpietzsch/gpuidium"
-version = "0.0.1"
+version = "0.1.0"
+
+[profile.release]
+# Smaller binaries for packages (debug info is not needed in releases).
+strip = true
 
 [workspace.dependencies]
 anyhow = "1"

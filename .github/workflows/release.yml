@@ -1,0 +1,180 @@
+name: release
+# Builds every Linux package. On a `v*` tag it also publishes a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "packaging/**"
+      - ".github/workflows/release.yml"
+      - "Cargo.toml"
+      - "crates/gpuidium/Cargo.toml"
+      - "scripts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tarball:
+    name: tarball + SBOM
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxkbcommon-x11-dev \
+            libvulkan-dev librsvg2-bin
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: "1.99.1" }
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/package-linux.sh
+      - name: SBOM (CycloneDX)
+        run: |
+          cargo install cargo-cyclonedx --locked
+          cargo cyclonedx --format json
+          ver=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import sys,json;print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="gpuidium"))')
+          cp crates/gpuidium/gpuidium.cdx.json "dist/gpuidium-$ver.cdx.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/*.cdx.json
+
+  deb:
+    name: .deb (Ubuntu 24.04 / Debian 13)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxkbcommon-x11-dev \
+            libvulkan-dev dpkg-dev
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: "1.99.1" }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-deb --locked
+      - run: cargo build --release -p gpuidium --bin gpuidium
+      - run: cargo deb -p gpuidium --no-build
+      - name: Inspect package
+        run: |
+          dpkg-deb --info target/debian/*.deb
+          dpkg-deb --contents target/debian/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: target/debian/*.deb
+
+  rpm:
+    name: .rpm (Fedora)
+    runs-on: ubuntu-24.04
+    container: fedora:42
+    steps:
+      - run: |
+          dnf install -y git tar gzip curl gcc gcc-c++ pkgconf-pkg-config gtk3-devel \
+            webkit2gtk4.1-devel libxkbcommon-x11-devel vulkan-loader-devel rpm
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: "1.99.1" }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-generate-rpm --locked
+      - run: cargo build --release -p gpuidium --bin gpuidium
+      - run: cargo generate-rpm -p crates/gpuidium
+      - name: Inspect package
+        run: |
+          rpm -qip target/generate-rpm/*.rpm
+          rpm -qlp target/generate-rpm/*.rpm
+          rpm -qRp target/generate-rpm/*.rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm
+          path: target/generate-rpm/*.rpm
+
+  arch:
+    name: Arch package (makepkg)
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - run: |
+          pacman -Syu --noconfirm git webkit2gtk-4.1 gtk3 libxkbcommon-x11 \
+            vulkan-icd-loader xdg-utils cargo pkgconf
+      - uses: actions/checkout@v4
+      - name: Build from this checkout
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ver=$(sed -n 's/^pkgver=//p' packaging/arch/PKGBUILD)
+          git archive --prefix="gpuidium-$ver/" -o "/tmp/gpuidium-$ver.tar.gz" HEAD
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && GPUIDIUM_SRC=/tmp/gpuidium-$ver.tar.gz makepkg -f --noconfirm --nodeps"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: packaging/arch/*.pkg.tar.zst
+
+  flatpak:
+    name: Flatpak
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate offline cargo sources from Cargo.lock
+        run: |
+          pip3 install aiohttp tomlkit
+          git clone --depth 1 https://github.com/flatpak/flatpak-builder-tools /tmp/flatpak-builder-tools
+          python3 /tmp/flatpak-builder-tools/cargo/flatpak-cargo-generator.py Cargo.lock \
+            -o packaging/flatpak/cargo-sources.json
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: io.github.rpietzsch.GPUIdium.flatpak
+          manifest-path: packaging/flatpak/io.github.rpietzsch.GPUIdium.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: io.github.rpietzsch.GPUIdium.flatpak
+
+  publish:
+    name: publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tarball, deb, rpm, arch, flatpak]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Checksums and release notes
+        run: |
+          cd artifacts
+          sha256sum *.deb *.rpm *.pkg.tar.zst *.flatpak *.tar.gz *.cdx.json > SHA256SUMS
+          cd ..
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v v="$ver" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notes.md
+          test -s notes.md
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            artifacts/*.deb
+            artifacts/*.rpm
+            artifacts/*.pkg.tar.zst
+            artifacts/*.flatpak
+            artifacts/*.tar.gz
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/* \
+            --title "GPUIdium ${GITHUB_REF_NAME#v}" --notes-file notes.md --verify-tag

@@ -10,11 +10,12 @@ name="gpuidium-$ver-linux-x86_64"
 mkdir -p dist
 stage=$(mktemp -d dist/stage.XXXXXX)
 out="$stage/$name"
-mkdir -p "$out/bin" "$out/share/applications" "$out/share/icons/hicolor/scalable/apps" "$out/share/icons/hicolor/256x256/apps"
+mkdir -p "$out/bin" "$out/share/applications" "$out/share/metainfo" "$out/share/icons/hicolor/scalable/apps" "$out/share/icons/hicolor/256x256/apps"
 install -m755 target/release/gpuidium "$out/bin/gpuidium"
-install -m644 packaging/gpuidium.desktop "$out/share/applications/"
-install -m644 packaging/icons/gpuidium.svg "$out/share/icons/hicolor/scalable/apps/gpuidium.svg"
-rsvg-convert -w 256 packaging/icons/gpuidium.svg -o "$out/share/icons/hicolor/256x256/apps/gpuidium.png" 2>/dev/null || true
+install -m644 packaging/io.github.rpietzsch.GPUIdium.desktop "$out/share/applications/"
+install -Dm644 packaging/io.github.rpietzsch.GPUIdium.metainfo.xml "$out/share/metainfo/io.github.rpietzsch.GPUIdium.metainfo.xml"
+install -m644 packaging/icons/io.github.rpietzsch.GPUIdium.svg "$out/share/icons/hicolor/scalable/apps/io.github.rpietzsch.GPUIdium.svg"
+rsvg-convert -w 256 packaging/icons/io.github.rpietzsch.GPUIdium.svg -o "$out/share/icons/hicolor/256x256/apps/io.github.rpietzsch.GPUIdium.png" 2>/dev/null || true
 cp README.md LICENSE "$out/"; cp -r docs "$out/docs"
 tar -C "$stage" -czf "dist/$name.tar.gz" "$name"
 ( cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256" )

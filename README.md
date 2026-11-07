@@ -2,7 +2,7 @@
 
 A lightweight, keyboard-friendly [GPUI](https://gpui.rs) shell for web apps. Paste a URL, get a persistent sidebar entry with its own isolated browser profile. No recipe catalog, no telemetry, no account.
 
-**Status:** pre-alpha, in the feasibility phase. See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
+**Status:** 0.1.0, Linux (X11/XWayland) only; Windows and macOS are not supported yet. See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
 
 ## Prerequisites
 
@@ -35,6 +35,7 @@ task package:linux   # dist/gpuidium-<ver>-linux-x86_64.tar.gz (+ .sha256)
 task release:linux   # package + checksum + optional GPG signature + verification (docs/updates.md)
 ```
 
+Packaging: [`docs/packaging.md`](docs/packaging.md). Changes: [`CHANGELOG.md`](CHANGELOG.md).
 See [`docs/known-limits.md`](docs/known-limits.md) for privacy, isolation limits and login behaviour,
 and [`docs/security-review.md`](docs/security-review.md).
 

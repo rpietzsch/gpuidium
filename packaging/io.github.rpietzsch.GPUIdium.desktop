@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=GPUIdium
+GenericName=Web app workspace
+Comment=A minimal workspace for arbitrary websites, each with its own isolated profile
+Exec=gpuidium
+Icon=io.github.rpietzsch.GPUIdium
+Categories=Network;WebBrowser;
+Keywords=web;apps;workspace;sidebar;
+Terminal=false
+StartupNotify=true
+StartupWMClass=gpuidium

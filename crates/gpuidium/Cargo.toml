@@ -1,8 +1,11 @@
 [package]
 name = "gpuidium"
 description = "GPUIdium: GPUI shell for web apps"
+readme = "../../README.md"
+repository.workspace = true
 version.workspace = true
 edition.workspace = true
+default-run = "gpuidium"
 license.workspace = true
 
 [dependencies]
@@ -22,3 +25,48 @@ gtk = "0.18"
 webkit2gtk = "2.0"
 # PNG encode/decode for favicons and the window icon (feature unifies with gtk's cairo).
 cairo-rs = { version = "0.18", features = ["png"] }
+
+# --- Linux packages (see docs/packaging.md) -----------------------------------------------
+# Debian/Ubuntu: `cargo deb -p gpuidium` (run after `cargo build --release -p gpuidium`).
+[package.metadata.deb]
+name = "gpuidium"
+maintainer = "GPUIdium maintainers <noreply@github.com>"
+copyright = "2026, GPUIdium contributors"
+license-file = ["../../LICENSE", "0"]
+section = "web"
+priority = "optional"
+extended-description = """\
+GPUIdium keeps your web apps in a narrow icon sidebar. Every entry has its own isolated \
+browser profile. Pages are rendered by the system WebKitGTK; runs on X11 or XWayland."""
+# $auto resolves the exact shared-library packages (incl. libwebkit2gtk-4.1-0) at build time.
+depends = "$auto, xdg-utils"
+recommends = "libnotify-bin, mesa-vulkan-drivers"
+assets = [
+  ["target/release/gpuidium", "usr/bin/", "755"],
+  ["../../packaging/io.github.rpietzsch.GPUIdium.desktop", "usr/share/applications/", "644"],
+  ["../../packaging/io.github.rpietzsch.GPUIdium.metainfo.xml", "usr/share/metainfo/", "644"],
+  ["../../packaging/icons/io.github.rpietzsch.GPUIdium.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+  ["../../README.md", "usr/share/doc/gpuidium/README.md", "644"],
+]
+
+# Fedora/openSUSE/RHEL family: `cargo generate-rpm -p crates/gpuidium`.
+[package.metadata.generate-rpm]
+name = "gpuidium"
+summary = "A minimal workspace for arbitrary websites, each with its own isolated profile"
+license = "Apache-2.0"
+url = "https://github.com/rpietzsch/gpuidium"
+assets = [
+  { source = "target/release/gpuidium", dest = "/usr/bin/gpuidium", mode = "755" },
+  { source = "packaging/io.github.rpietzsch.GPUIdium.desktop", dest = "/usr/share/applications/io.github.rpietzsch.GPUIdium.desktop", mode = "644" },
+  { source = "packaging/io.github.rpietzsch.GPUIdium.metainfo.xml", dest = "/usr/share/metainfo/io.github.rpietzsch.GPUIdium.metainfo.xml", mode = "644" },
+  { source = "packaging/icons/io.github.rpietzsch.GPUIdium.svg", dest = "/usr/share/icons/hicolor/scalable/apps/io.github.rpietzsch.GPUIdium.svg", mode = "644" },
+  { source = "README.md", dest = "/usr/share/doc/gpuidium/README.md", mode = "644", doc = true },
+  { source = "LICENSE", dest = "/usr/share/licenses/gpuidium/LICENSE", mode = "644", license = true },
+]
+
+[package.metadata.generate-rpm.requires]
+webkit2gtk4_1 = ">= 2.40"
+gtk3 = "*"
+libxkbcommon-x11 = "*"
+vulkan-loader = "*"
+xdg-utils = "*"

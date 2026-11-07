@@ -3001,7 +3001,7 @@ dependencies = [
 
 [[package]]
 name = "gpuidium"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "cairo-rs",
@@ -3018,7 +3018,7 @@ dependencies = [
 
 [[package]]
 name = "gpuidium-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "fd-lock",
  "idna",

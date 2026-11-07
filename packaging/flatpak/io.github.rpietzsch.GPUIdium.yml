@@ -1,0 +1,41 @@
+# Flatpak manifest. Build locally:
+#   python3 flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
+#   flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.rpietzsch.GPUIdium.yml
+# `cargo-sources.json` is generated from Cargo.lock (CI does it); it is not committed.
+app-id: io.github.rpietzsch.GPUIdium
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: gpuidium
+
+finish-args:
+  # GPUIdium currently needs an X11 (or XWayland) window; see docs/packaging.md.
+  - --socket=x11
+  - --share=ipc
+  - --device=dri
+  - --share=network
+  - --socket=pulseaudio
+  - --talk-name=org.freedesktop.Notifications
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/gpuidium/cargo
+    RUST_BACKTRACE: '1'
+
+modules:
+  - name: gpuidium
+    buildsystem: simple
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      - cargo --offline build --release --verbose -p gpuidium --bin gpuidium
+      - install -Dm755 target/release/gpuidium /app/bin/gpuidium
+      - install -Dm644 packaging/io.github.rpietzsch.GPUIdium.desktop /app/share/applications/io.github.rpietzsch.GPUIdium.desktop
+      - install -Dm644 packaging/io.github.rpietzsch.GPUIdium.metainfo.xml /app/share/metainfo/io.github.rpietzsch.GPUIdium.metainfo.xml
+      - install -Dm644 packaging/icons/io.github.rpietzsch.GPUIdium.svg /app/share/icons/hicolor/scalable/apps/io.github.rpietzsch.GPUIdium.svg
+    sources:
+      - type: dir
+        path: ../..
+      - cargo-sources.json

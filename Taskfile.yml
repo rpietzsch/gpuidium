@@ -28,7 +28,7 @@ tasks:
   run:
     desc: Run the GPUIdium app
     cmds:
-      - cargo run -p gpuidium -- {{.CLI_ARGS}}
+      - cargo run -p gpuidium --bin gpuidium -- {{.CLI_ARGS}}
 
   test:
     desc: Run all tests
