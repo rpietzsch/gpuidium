@@ -8,7 +8,7 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [0.4.0] - 2026-11-08
 
-Unread badges, per-app notifications and spell checking. First release with a macOS download.
+Unread badges, per-app notifications and spell checking. Packages are still Linux only.
 
 ### Added
 - Unread badges: the sidebar shows the unread count from the page title (for example
@@ -19,11 +19,9 @@ Unread badges, per-app notifications and spell checking. First release with a ma
 - Spell checking with a switch in Manage. Linux: choose several dictionaries at once (for
   example en_US and de_DE). macOS: the system spell checker detects the language per word
   among the languages set in System Settings.
-- macOS: the release page has a universal `GPUIdium.app` zip (Apple Silicon and Intel), built
-  in CI. It is ad-hoc signed, not notarized: on first start, right-click the app and choose
-  Open (or run `xattr -dr com.apple.quarantine /Applications/GPUIdium.app`).
-- macOS: `task install:macos` builds the app and copies it to `/Applications`.
-- CI checks and packages on macOS too.
+- macOS: `task install:macos` builds the app and copies it to `/Applications`;
+  `GPUIDIUM_UNIVERSAL=1 scripts/package-macos.sh` builds a universal (Apple Silicon + Intel)
+  app. macOS is built locally only: no CI job and no download, as the app is not notarized.
 
 ### Fixed
 - macOS: arrow keys, Home/End, Page Up/Down and F-keys reach web pages as key events. Before,

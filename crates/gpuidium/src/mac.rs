@@ -165,7 +165,8 @@ pub fn set_dock_badge(label: Option<&str>) {
 /// responder, this monitor delivers such keys (without Cmd, so app shortcuts stay with GPUI)
 /// to the web view's `keyDown:` and drops them from normal dispatch. WebKit sends a key the
 /// page did not handle back through the application (the same event object); that copy is
-/// dropped too, otherwise the text system would insert its control character.
+/// dropped too (recognised by timestamp and key code), otherwise the text system would insert
+/// its control character.
 pub fn install_page_key_monitor() {
     use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags, NSEventType};
     use std::ptr::NonNull;
@@ -174,7 +175,10 @@ pub fn install_page_key_monitor() {
         log("page keys: WKWebView class missing");
         return;
     };
-    let last: std::cell::RefCell<Option<Retained<NSEvent>>> = std::cell::RefCell::new(None);
+    // Keys handed to a web view, by (timestamp, key code): AppKit reuses NSEvent objects for
+    // later key presses, so object identity cannot tell WebKit's resend from a new press.
+    let forwarded: std::cell::RefCell<std::collections::VecDeque<(f64, u16)>> =
+        std::cell::RefCell::new(std::collections::VecDeque::new());
     let handler = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
         let ev = unsafe { event.as_ref() };
         let flags = ev.modifierFlags();
@@ -194,15 +198,18 @@ pub fn install_page_key_monitor() {
         if !responder.isKindOfClass(web_view_class) {
             return event.as_ptr();
         }
-        let mut last = last.borrow_mut();
-        if last.as_deref().is_some_and(|l| std::ptr::eq(l, ev)) {
+        let key = (ev.timestamp(), ev.keyCode());
+        let mut seen = forwarded.borrow_mut();
+        if let Some(i) = seen.iter().position(|k| *k == key) {
             // WebKit's resend of a key the page left unhandled.
-            *last = None;
+            seen.remove(i);
             return std::ptr::null_mut();
         }
-        // Kept retained, so a later event cannot reuse the address.
-        *last = Some(objc2::Message::retain(ev));
-        drop(last);
+        if seen.len() == 32 {
+            seen.pop_front();
+        }
+        seen.push_back(key);
+        drop(seen);
         let _: () = unsafe { msg_send![&*responder, keyDown: ev] };
         std::ptr::null_mut()
     });
