@@ -6,6 +6,34 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-08
+
+Adds page zoom and better behaviour for web apps with their own shortcuts. First version that
+builds and runs on macOS (14 or later, from source; experimental, no package yet). Packages are
+still Linux only.
+
+### Added
+- Page zoom with Ctrl/Cmd + `+` / `-` / `0` (also `=` and the numpad keys): 10 % steps between
+  30 % and 300 %, kept per app across restarts.
+- macOS: per-profile isolation with one WebKit data store per app (macOS 14 or later; on older
+  systems pages are refused rather than sharing one store), Edit menu so copy and paste work
+  in pages, Cmd+Q, page favicons, Safari user agent (sites such as WhatsApp Web no longer ask
+  for a newer Safari), and Cmd+. reaches the page.
+- `task test:isolation` and `task test:oidc` also run on macOS.
+
+### Changed
+- Ctrl/Cmd+K is no longer a GPUIdium shortcut, so pages can use it (for example Mattermost's
+  quick switcher). The Open panel stays on Ctrl/Cmd+L and the + button.
+- Linux: Ctrl+Shift combinations (for example Ctrl+Shift+K or Ctrl+Shift+L) now go to the page
+  instead of being taken by GPUIdium.
+
+### Fixed
+- Building on macOS failed, and the vendored `lb-wry` produced compiler warnings there.
+
+### Known limitations
+- macOS: shortcuts other than Cmd+. are not intercepted while a page has focus, and there is
+  no load-failure page and no page notifications yet. Undo/Redo are not in the Edit menu.
+
 ## [0.2.0] - 2026-11-07
 
 First usable release after the 0.0.1 pre-alpha, for Linux (X11 and XWayland). Windows and macOS are not supported yet.
@@ -53,5 +81,6 @@ First usable release after the 0.0.1 pre-alpha, for Linux (X11 and XWayland). Wi
 - In Flatpak, export and import use fixed files inside the app's config folder (no file
   dialog yet).
 
-[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.3.0
 [0.2.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.2.0

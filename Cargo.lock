@@ -3001,7 +3001,7 @@ dependencies = [
 
 [[package]]
 name = "gpuidium"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3022,7 +3022,7 @@ dependencies = [
 
 [[package]]
 name = "gpuidium-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "fd-lock",
  "idna",
