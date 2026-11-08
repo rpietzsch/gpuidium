@@ -8,6 +8,8 @@ use objc2::{
   runtime::{Bool, ProtocolObject},
   DeclaredClass,
 };
+// GPUIdium patch: NSFilenamesPboardType is deprecated but still what upstream reads; keep behaviour.
+#[allow(deprecated)]
 use objc2_app_kit::{NSDragOperation, NSDraggingInfo, NSFilenamesPboardType};
 use objc2_foundation::{NSArray, NSPoint, NSRect, NSString};
 
@@ -15,6 +17,7 @@ use crate::DragDropEvent;
 
 use super::WryWebView;
 
+#[allow(deprecated)]
 pub(crate) unsafe fn collect_paths(drag_info: &ProtocolObject<dyn NSDraggingInfo>) -> Vec<PathBuf> {
   let pb = drag_info.draggingPasteboard();
   let mut drag_drop_paths = Vec::new();
@@ -37,7 +40,7 @@ pub(crate) fn dragging_entered(
   drag_info: &ProtocolObject<dyn NSDraggingInfo>,
 ) -> NSDragOperation {
   let paths = unsafe { collect_paths(drag_info) };
-  let dl: NSPoint = unsafe { drag_info.draggingLocation() };
+  let dl: NSPoint = drag_info.draggingLocation();
   let frame: NSRect = this.frame();
   let position = (dl.x as i32, (frame.size.height - dl.y) as i32);
 
@@ -54,7 +57,7 @@ pub(crate) fn dragging_updated(
   this: &WryWebView,
   drag_info: &ProtocolObject<dyn NSDraggingInfo>,
 ) -> NSDragOperation {
-  let dl: NSPoint = unsafe { drag_info.draggingLocation() };
+  let dl: NSPoint = drag_info.draggingLocation();
   let frame: NSRect = this.frame();
   let position = (dl.x as i32, (frame.size.height - dl.y) as i32);
 
@@ -82,7 +85,7 @@ pub(crate) fn perform_drag_operation(
   drag_info: &ProtocolObject<dyn NSDraggingInfo>,
 ) -> Bool {
   let paths = unsafe { collect_paths(drag_info) };
-  let dl: NSPoint = unsafe { drag_info.draggingLocation() };
+  let dl: NSPoint = drag_info.draggingLocation();
   let frame: NSRect = this.frame();
   let position = (dl.x as i32, (frame.size.height - dl.y) as i32);
 

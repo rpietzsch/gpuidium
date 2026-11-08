@@ -9,7 +9,7 @@ mod external;
 mod host;
 mod icon;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -29,6 +29,7 @@ use gpuidium_core::{
     instance::InstanceLock,
     lifecycle, paths, profiles,
     storage::{self, Config, Recovery, Settings, WindowConfig},
+    zoom::{self, ZoomChange},
 };
 
 use host::{HostEvent, Shortcut as Key, WebviewHost, WryHost};
@@ -53,20 +54,70 @@ const MOD: &str = if cfg!(target_os = "macos") {
 actions!(
     gpuidium,
     [
-        OpenPanel, Reload, GoBack, GoForward, Manage, Shortcuts, Dismiss, Select1, Select2,
-        Select3, Select4, Select5, Select6, Select7, Select8, Select9
+        OpenPanel,
+        Reload,
+        GoBack,
+        GoForward,
+        Manage,
+        Shortcuts,
+        Dismiss,
+        Select1,
+        Select2,
+        Select3,
+        Select4,
+        Select5,
+        Select6,
+        Select7,
+        Select8,
+        Select9,
+        Quit,
+        PageCmdPeriod,
+        ZoomIn,
+        ZoomOut,
+        ZoomReset
     ]
 );
+
+/// macOS app and Edit menus. WKWebView only receives Cut/Copy/Paste/Select All
+/// through the Edit menu's native selectors (`paste:` ...): without the menu,
+/// Cmd+V does nothing in web pages. The shortcuts come from the text input's own
+/// bindings, so call this after `gpui_kit::init`. Undo/Redo are left out: GPUI
+/// routes those items to its own actions, which would swallow Cmd+Z in pages.
+#[cfg(target_os = "macos")]
+fn install_menus(cx: &mut App) {
+    use gpui_kit::component::input::{Copy as CopyText, Cut, Paste, SelectAll};
+    use gpui_kit::{Menu, MenuItem, OsAction};
+    cx.on_action(|_: &Quit, cx| cx.quit());
+    cx.bind_keys([
+        KeyBinding::new("cmd-q", Quit, None),
+        // Text inputs keep their own, more specific cmd-. binding.
+        KeyBinding::new("cmd-.", PageCmdPeriod, None),
+    ]);
+    cx.set_menus(vec![
+        Menu::new("GPUIdium").items([MenuItem::action("Quit GPUIdium", Quit)]),
+        Menu::new("Edit").items([
+            MenuItem::os_action("Cut", Cut, OsAction::Cut),
+            MenuItem::os_action("Copy", CopyText, OsAction::Copy),
+            MenuItem::os_action("Paste", Paste, OsAction::Paste),
+            MenuItem::separator(),
+            MenuItem::os_action("Select All", SelectAll, OsAction::SelectAll),
+        ]),
+    ]);
+}
 
 /// Keyboard reference shown by Ctrl/Cmd+? (single source for the sheet).
 fn shortcut_rows() -> Vec<(String, &'static str)> {
     vec![
         (
-            format!("{MOD}+L  /  {MOD}+K"),
+            format!("{MOD}+L"),
             "Enter an address to open a web app, or find one",
         ),
         (format!("{MOD}+1 … {MOD}+9"), "Switch to the 1st … 9th app"),
         (format!("{MOD}+R"), "Reload the current page"),
+        (
+            format!("{MOD}+Plus  /  {MOD}+Minus  /  {MOD}+0"),
+            "Zoom the page in / out by 10 %, or back to 100 %",
+        ),
         ("Alt+←  /  Alt+→".into(), "Back / forward"),
         (format!("{MOD}+,"), "Manage apps, data and settings"),
         (format!("{MOD}+?  /  F1"), "Show this sheet"),
@@ -130,6 +181,8 @@ struct Shell {
     state: AppState,
     window_cfg: WindowConfig,
     settings: Settings,
+    /// Per-app page zoom in percent (absent = 100 %).
+    zoom: BTreeMap<AppId, u16>,
     config_dir: PathBuf,
     data_dir: PathBuf,
     host: WryHost,
@@ -162,6 +215,7 @@ impl Shell {
         state: AppState,
         window_cfg: WindowConfig,
         settings: Settings,
+        zoom: BTreeMap<AppId, u16>,
         config_dir: PathBuf,
         data_dir: PathBuf,
         status: String,
@@ -237,6 +291,7 @@ impl Shell {
             state,
             window_cfg,
             settings,
+            zoom,
             config_dir,
             data_dir,
             host,
@@ -296,6 +351,13 @@ impl Shell {
     fn save(&mut self) {
         let mut cfg = Config::from_state(&self.state, self.window_cfg);
         cfg.settings = self.settings;
+        // Only apps that still exist, and only non-default levels.
+        cfg.zoom = self
+            .zoom
+            .iter()
+            .filter(|(id, z)| **z != zoom::DEFAULT && self.state.get(**id).is_some())
+            .map(|(id, z)| (*id, zoom::sanitize(*z)))
+            .collect();
         if let Err(e) = storage::save(&self.config_dir, &cfg) {
             self.status = format!("Could not save config: {e}");
         }
@@ -327,6 +389,9 @@ impl Shell {
                     .create(window, cx, id, app.profile_id, &app.start_url)
                 {
                     Ok(()) => {
+                        if let Some(&z) = self.zoom.get(&id) {
+                            self.host.set_zoom(cx, id, zoom::sanitize(z));
+                        }
                         self.pages.insert(
                             id,
                             PageInfo {
@@ -423,6 +488,7 @@ impl Shell {
                 HostEvent::Shortcut(sc) => match sc {
                     Key::Open => self.open_panel(cx),
                     Key::Reload => self.reload_active(cx),
+                    Key::Zoom(change) => self.zoom_active(change, cx),
                     Key::Manage => self.set_panel(Panel::Manage, cx),
                     Key::Keys => self.set_panel(Panel::Shortcuts, cx),
                     Key::Select(n) => self.select_nth(n, window, cx),
@@ -449,6 +515,8 @@ impl Shell {
                     let p = self.pages.entry(id).or_default();
                     p.url = url;
                     p.loading = false;
+                    #[cfg(target_os = "macos")]
+                    self.host.refresh_favicon(cx, id);
                 }
                 HostEvent::LoadFailed(id, url, msg) => {
                     // Policy-blocked or superseded navigations surface as "cancelled".
@@ -460,7 +528,12 @@ impl Shell {
                         log(&format!("load failed: {}", redact_url(&url)));
                     }
                 }
-                HostEvent::Title(id, t) => self.pages.entry(id).or_default().title = t,
+                HostEvent::Title(id, t) => {
+                    // Single-page apps (e.g. an unread count) change the icon with the title.
+                    #[cfg(target_os = "macos")]
+                    self.host.refresh_favicon(cx, id);
+                    self.pages.entry(id).or_default().title = t;
+                }
                 HostEvent::Blocked(u) => self.status = format!("Blocked navigation to {u}"),
                 HostEvent::OpenedExternally(u) => {
                     self.status = format!("Opened in system browser: {u}")
@@ -499,7 +572,7 @@ impl Shell {
                         let _ = std::fs::remove_file(paths::favicon_file(&self.data_dir, id));
                         if mode == RemoveMode::DeleteData {
                             // The native view is closed above; only this profile is touched.
-                            self.status = match profiles::delete(&self.data_dir, profile_id) {
+                            self.status = match host::delete_profile(&self.data_dir, profile_id) {
                                 Ok(()) => "App removed and its browsing data deleted".into(),
                                 Err(e) => format!("App removed, but deleting its data failed: {e}"),
                             };
@@ -610,6 +683,20 @@ impl Shell {
         }
     }
 
+    /// Ctrl/Cmd + `+` / `-` / `0`: change the active app's zoom in 10 % steps (persisted).
+    fn zoom_active(&mut self, change: ZoomChange, cx: &mut Context<Self>) {
+        let Some(id) = self.state.active() else {
+            return;
+        };
+        let current = self.zoom.get(&id).copied().unwrap_or(zoom::DEFAULT);
+        let next = zoom::apply(current, change);
+        self.zoom.insert(id, next);
+        self.host.set_zoom(cx, id, next);
+        self.status = format!("Zoom {next} %");
+        self.save();
+        cx.notify();
+    }
+
     fn retry_active(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.state.active() else {
             return;
@@ -659,7 +746,7 @@ impl Shell {
                         if this.state.apps().iter().any(|a| a.profile_id == id) {
                             return true;
                         }
-                        let res = profiles::delete(&this.data_dir, id);
+                        let res = host::delete_profile(&this.data_dir, id);
                         if let Err(e) = &res {
                             this.status = format!("Deleting leftover data failed: {e}");
                             cx.notify();
@@ -680,7 +767,7 @@ impl Shell {
         if self.state.apps().iter().any(|a| a.profile_id == id) {
             return;
         }
-        self.status = match profiles::delete(&self.data_dir, id) {
+        self.status = match host::delete_profile(&self.data_dir, id) {
             Ok(()) => "Deleted retained browsing data".into(),
             Err(e) => format!("Could not delete retained data: {e}"),
         };
@@ -694,7 +781,7 @@ impl Shell {
         let mut failed = 0;
         for id in &ids {
             if self.state.apps().iter().any(|a| a.profile_id == *id)
-                || profiles::delete(&self.data_dir, *id).is_err()
+                || host::delete_profile(&self.data_dir, *id).is_err()
             {
                 failed += 1;
             }
@@ -1447,6 +1534,23 @@ impl Render for Shell {
             )
             .on_action(cx.listener(|this, _: &Dismiss, _, cx| this.dismiss(cx)))
             .on_action(cx.listener(|this, _: &Reload, _, cx| this.reload_active(cx)))
+            .on_action(cx.listener(|this, _: &ZoomIn, _, cx| this.zoom_active(ZoomChange::In, cx)))
+            .on_action(
+                cx.listener(|this, _: &ZoomOut, _, cx| this.zoom_active(ZoomChange::Out, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &ZoomReset, _, cx| this.zoom_active(ZoomChange::Reset, cx)),
+            )
+            .on_action(cx.listener(|this, _: &PageCmdPeriod, _, cx| {
+                #[cfg(target_os = "macos")]
+                if this.panel == Panel::None
+                    && let Some(id) = this.state.active()
+                {
+                    this.host.forward_current_key(cx, id);
+                }
+                #[cfg(not(target_os = "macos"))]
+                let _ = (this, cx);
+            }))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| {
                 if let Some(id) = this.state.active() {
                     this.host.back(cx, id);
@@ -1516,6 +1620,7 @@ fn main() {
 
     let window_cfg = loaded.config.window;
     let settings = loaded.config.settings;
+    let zoom = loaded.config.zoom.clone();
     let state = loaded.config.to_state();
 
     #[cfg(target_os = "linux")]
@@ -1527,8 +1632,13 @@ fn main() {
         gpui_kit::init(cx);
         cx.bind_keys([
             KeyBinding::new(mod_key!("l"), OpenPanel, None),
-            KeyBinding::new(mod_key!("k"), OpenPanel, None),
             KeyBinding::new(mod_key!("r"), Reload, None),
+            // "+" is Shift+= on US layouts and its own key on German ones.
+            KeyBinding::new(mod_key!("="), ZoomIn, None),
+            KeyBinding::new(mod_key!("+"), ZoomIn, None),
+            KeyBinding::new(mod_key!("shift-="), ZoomIn, None),
+            KeyBinding::new(mod_key!("-"), ZoomOut, None),
+            KeyBinding::new(mod_key!("0"), ZoomReset, None),
             KeyBinding::new(mod_key!(","), Manage, None),
             KeyBinding::new(mod_key!("?"), Shortcuts, None),
             KeyBinding::new(mod_key!("shift-/"), Shortcuts, None),
@@ -1546,6 +1656,8 @@ fn main() {
             KeyBinding::new("alt-left", GoBack, None),
             KeyBinding::new("alt-right", GoForward, None),
         ]);
+        #[cfg(target_os = "macos")]
+        install_menus(cx);
         let opts = WindowOptions {
             icon: icon::window_icon(),
             ..WindowOptions::default()
@@ -1553,7 +1665,7 @@ fn main() {
         let (_, shell) = gpui_kit::open_window(opts, cx, move |window, cx| {
             cx.new(|cx| {
                 Shell::new(
-                    state, window_cfg, settings, config_dir, data_dir, status, window, cx,
+                    state, window_cfg, settings, zoom, config_dir, data_dir, status, window, cx,
                 )
             })
         })

@@ -34,7 +34,7 @@ use dpi::{LogicalPosition, LogicalSize};
 use objc2::runtime::Bool;
 use objc2::{
   rc::Retained,
-  runtime::{AnyObject, NSObject, ProtocolObject},
+  runtime::{AnyObject, ProtocolObject},
   AllocAnyThread, DeclaredClass, MainThreadOnly, Message,
 };
 #[cfg(target_os = "macos")]
@@ -255,6 +255,8 @@ impl InnerWebView {
             let identifier = NSUUID::from_bytes(data_store);
             WKWebsiteDataStore::dataStoreForIdentifier(&identifier, mtm)
           }
+          // GPUIdium patch: fail closed instead of sharing the default store.
+          (false, false, Some(_)) => return Err(Error::CustomDataStoreUnavailable),
           // default data store
           _ => WKWebsiteDataStore::defaultDataStore(mtm),
         };
@@ -346,7 +348,7 @@ impl InnerWebView {
           }
         };
 
-        let proxies: Retained<NSArray<NSObject>> = NSArray::arrayWithObject(&*proxy_config);
+        let proxies: Retained<NSArray<objc2::runtime::NSObject>> = NSArray::arrayWithObject(&*proxy_config);
         data_store.setValue_forKey(Some(&proxies), ns_string!("proxyConfigurations"));
       }
 
@@ -509,7 +511,7 @@ impl InnerWebView {
       #[cfg(any(debug_assertions, feature = "devtools"))]
       if attributes.devtools {
         let has_inspectable_property: bool =
-          NSObject::respondsToSelector(&webview, objc2::sel!(setInspectable:));
+          objc2::runtime::NSObject::respondsToSelector(&webview, objc2::sel!(setInspectable:));
         if has_inspectable_property {
           webview.setInspectable(true);
         }
@@ -673,7 +675,7 @@ r#"Object.defineProperty(window, 'ipc', {
     }
   }
 
-  pub fn id(&self) -> crate::WebViewId {
+  pub fn id(&self) -> crate::WebViewId<'_> {
     &self.id
   }
 
@@ -1258,7 +1260,7 @@ r#"Object.defineProperty(window, 'ipc', {
 
 pub fn url_from_webview(webview: &WKWebView) -> Result<String> {
   let url_obj = unsafe { webview.URL().unwrap() };
-  let absolute_url = unsafe { url_obj.absoluteString().unwrap() };
+  let absolute_url = url_obj.absoluteString().unwrap();
 
   let bytes = {
     let bytes: *const c_char = absolute_url.UTF8String();

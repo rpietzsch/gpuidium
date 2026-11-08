@@ -3,7 +3,7 @@
 //! `config.json` holds only app metadata. Cookies, tokens and other browsing
 //! data live in engine-owned profile directories and never in this file.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -54,6 +54,9 @@ pub struct Config {
     pub window: WindowConfig,
     #[serde(default)]
     pub settings: Settings,
+    /// Per-app page zoom in percent; apps at 100 % are not listed (additive, schema v1).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub zoom: BTreeMap<AppId, u16>,
 }
 
 impl Default for Config {
@@ -64,6 +67,7 @@ impl Default for Config {
             active_app_id: None,
             window: WindowConfig::default(),
             settings: Settings::default(),
+            zoom: BTreeMap::new(),
         }
     }
 }
@@ -96,6 +100,7 @@ impl Config {
             active_app_id: state.active(),
             window,
             settings: Settings::default(),
+            zoom: BTreeMap::new(),
         }
     }
 
@@ -419,5 +424,21 @@ mod tests {
         let l = load(d.path()).unwrap(); // rejected -> recovered empty, original kept
         assert!(l.config.apps.is_empty());
         assert!(matches!(l.recovery, Recovery::StartedEmpty { .. }));
+    }
+
+    #[test]
+    fn zoom_roundtrips_and_is_optional() {
+        let d = tempfile::tempdir().unwrap();
+        let mut cfg = Config::from_state(&state_with(2), WindowConfig::default());
+        let id = cfg.apps[0].id;
+        cfg.zoom.insert(id, 120);
+        save(d.path(), &cfg).unwrap();
+        assert_eq!(load(d.path()).unwrap().config.zoom.get(&id), Some(&120));
+
+        // Configs written before zoom existed still load, and no zoom means no key.
+        let plain = Config::from_state(&state_with(1), WindowConfig::default());
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(!json.contains("zoom"));
+        assert!(Config::parse(json.as_bytes()).unwrap().zoom.is_empty());
     }
 }

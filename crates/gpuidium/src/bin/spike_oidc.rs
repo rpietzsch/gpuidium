@@ -284,6 +284,21 @@ impl Render for View {
     }
 }
 
+/// Same binding as `host::bind_profile_store`: on macOS WKWebView ignores the
+/// `WebContext` directory, so each profile needs its own `WKWebsiteDataStore`.
+fn bind_store(b: WebViewBuilder<'_>, profile: ProfileId) -> WebViewBuilder<'_> {
+    #[cfg(target_os = "macos")]
+    {
+        use wry::WebViewBuilderExtDarwin as _;
+        b.with_data_store_identifier(profile.as_uuid().into_bytes())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = profile;
+        b
+    }
+}
+
 fn main() {
     let mut args = std::env::args().skip(1);
     let root = PathBuf::from(args.next().expect("usage: spike_oidc <data-root> [flags]"));
@@ -298,8 +313,11 @@ fn main() {
     let wait: u64 = flag("--wait").and_then(|v| v.parse().ok()).unwrap_or(3);
     let profile_name = flag("--profile").unwrap_or_else(|| "default".into());
 
-    gtk::gdk::set_allowed_backends("x11");
-    gtk::init().expect("gtk init (is DISPLAY set / Xwayland running?)");
+    #[cfg(target_os = "linux")]
+    {
+        gtk::gdk::set_allowed_backends("x11");
+        gtk::init().expect("gtk init (is DISPLAY set / Xwayland running?)");
+    }
 
     let (lrp, lidp) = (listener(&root, "rp-port"), listener(&root, "idp-port"));
     let sh = Arc::new(Shared {
@@ -317,13 +335,18 @@ fn main() {
     let pid = ProfileId::parse(&stable(&root, &format!("profile-{profile_name}"))).unwrap();
     let start = format!("http://127.0.0.1:{}/", sh.rp_port);
 
-    gpui_kit::platform::linux(gpui_kit::WindowingModes::X11).run(move |cx| {
+    #[cfg(target_os = "linux")]
+    let app = gpui_kit::platform::linux(gpui_kit::WindowingModes::X11);
+    #[cfg(not(target_os = "linux"))]
+    let app = gpui_kit::application();
+
+    app.run(move |cx| {
         gpui_kit::init(cx);
         let dir = profile_dir(&root, pid);
         let (_, view) = gpui_kit::open_window(WindowOptions::default(), cx, move |window, cx| {
             std::fs::create_dir_all(&dir).unwrap();
             let mut ctx = WebContext::new(Some(dir));
-            let b = WebViewBuilder::new_with_web_context(&mut ctx)
+            let b = bind_store(WebViewBuilder::new_with_web_context(&mut ctx), pid)
                 .with_url(start)
                 .with_navigation_handler(|u| decide_navigation(&u) == NavDecision::Allow);
             let w = WebView::build(b, window, cx).expect("webview");

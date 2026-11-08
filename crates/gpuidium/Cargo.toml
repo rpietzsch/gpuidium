@@ -20,6 +20,13 @@ gpui-kit = { version = "=0.9.0", default-features = false, features = ["componen
 gpui-webview = "=0.9.0"
 wry = { version = "=0.53.3", package = "lb-wry" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# Already in the tree via lb-wry; used to read the installed Safari version (user agent).
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSBundle", "NSString", "NSObject"] }
+# Same versions as lb-wry; used to hand Cmd+. to the page (AppKit would turn it into "cancel").
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder", "NSView"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # Same major as gpui-webview; needed to init GTK before creating per-profile WebContexts.
 gtk = "0.18"
