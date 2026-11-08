@@ -25,6 +25,11 @@ Unread badges, per-app notifications and spell checking. First release with a ma
 - macOS: `task install:macos` builds the app and copies it to `/Applications`.
 - CI checks and packages on macOS too.
 
+### Fixed
+- macOS: arrow keys, Home/End, Page Up/Down and F-keys reach web pages as key events. Before,
+  Up/Down could not browse pickers such as Mattermost's Cmd+K channel switcher, and keys the
+  page did not handle typed "no glyph" boxes or control characters into the field.
+
 ### Changed
 - The global "Page notifications" opt-in is replaced by the per-app switch; all apps start
   with notifications on.

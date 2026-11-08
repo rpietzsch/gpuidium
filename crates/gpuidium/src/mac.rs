@@ -154,6 +154,65 @@ pub fn set_dock_badge(label: Option<&str>) {
     tile.setBadgeLabel(label.map(NSString::from_str).as_deref());
 }
 
+/// Hand navigation keys straight to a focused web page.
+///
+/// Arrows, Home/End, Page Up/Down, Forward Delete and F-keys carry AppKit's "function" flag,
+/// so the window offers them to GPUI's view as key equivalents first. GPUI passes them to the
+/// text-input system, which then talks to the focused web view as a text client: the page
+/// got `moveUp:`-style commands or the key's raw character inserted (control characters,
+/// or U+F700-F703 shown as "no glyph" boxes) but never a `keydown` event, so pickers like
+/// Mattermost's Ctrl/Cmd+K could not be browsed with Up/Down. While a web view is the first
+/// responder, this monitor delivers such keys (without Cmd, so app shortcuts stay with GPUI)
+/// to the web view's `keyDown:` and drops them from normal dispatch. WebKit sends a key the
+/// page did not handle back through the application (the same event object); that copy is
+/// dropped too, otherwise the text system would insert its control character.
+pub fn install_page_key_monitor() {
+    use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags, NSEventType};
+    use std::ptr::NonNull;
+
+    let Some(web_view_class) = objc2::runtime::AnyClass::get(c"WKWebView") else {
+        log("page keys: WKWebView class missing");
+        return;
+    };
+    let last: std::cell::RefCell<Option<Retained<NSEvent>>> = std::cell::RefCell::new(None);
+    let handler = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+        let ev = unsafe { event.as_ref() };
+        let flags = ev.modifierFlags();
+        if ev.r#type() != NSEventType::KeyDown
+            || !flags.contains(NSEventModifierFlags::Function)
+            || flags.contains(NSEventModifierFlags::Command)
+        {
+            return event.as_ptr();
+        }
+        // Local monitors run on the main thread.
+        let Some(mtm) = MainThreadMarker::new() else {
+            return event.as_ptr();
+        };
+        let Some(responder) = ev.window(mtm).and_then(|w| w.firstResponder()) else {
+            return event.as_ptr();
+        };
+        if !responder.isKindOfClass(web_view_class) {
+            return event.as_ptr();
+        }
+        let mut last = last.borrow_mut();
+        if last.as_deref().is_some_and(|l| std::ptr::eq(l, ev)) {
+            // WebKit's resend of a key the page left unhandled.
+            *last = None;
+            return std::ptr::null_mut();
+        }
+        // Kept retained, so a later event cannot reuse the address.
+        *last = Some(objc2::Message::retain(ev));
+        drop(last);
+        let _: () = unsafe { msg_send![&*responder, keyDown: ev] };
+        std::ptr::null_mut()
+    });
+    let monitor = unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler)
+    };
+    // The monitor lives for the whole process.
+    std::mem::forget(monitor);
+}
+
 const SPELL_KEY: &str = "WebContinuousSpellCheckingEnabled";
 
 /// WebKit's "check spelling while typing" switch. WebKit reads it when the first web view

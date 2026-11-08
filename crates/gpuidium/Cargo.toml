@@ -26,7 +26,7 @@ wry = { version = "=0.53.3", package = "lb-wry" }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSBundle", "NSData", "NSError", "NSString", "NSObject", "NSUserDefaults"] }
 # Same versions as lb-wry; used to hand Cmd+. to the page (AppKit would turn it into "cancel").
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSDockTile", "NSEvent", "NSImage", "NSResponder", "NSView"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSApplication", "NSDockTile", "NSEvent", "NSImage", "NSResponder", "NSView", "NSWindow"] }
 # Page notifications in Notification Center (bundled app only). Same versions as in Cargo.lock.
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSound", "UNNotificationTrigger", "UNUserNotificationCenter"] }
 block2 = "0.6"
