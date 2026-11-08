@@ -13,6 +13,7 @@ anyhow.workspace = true
 # Same major as gpui (window icon type); PNG decode only.
 image = { version = "0.25", default-features = false, features = ["png"] }
 async-channel = "2"
+serde_json.workspace = true
 thiserror.workspace = true
 url.workspace = true
 gpuidium-core = { path = "../gpuidium-core" }
@@ -22,10 +23,13 @@ wry = { version = "=0.53.3", package = "lb-wry" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Already in the tree via lb-wry; used to read the installed Safari version (user agent).
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSBundle", "NSData", "NSString", "NSObject"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSBundle", "NSData", "NSError", "NSString", "NSObject", "NSUserDefaults"] }
 # Same versions as lb-wry; used to hand Cmd+. to the page (AppKit would turn it into "cancel").
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSEvent", "NSImage", "NSResponder", "NSView"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSApplication", "NSDockTile", "NSEvent", "NSImage", "NSResponder", "NSView", "NSWindow"] }
+# Page notifications in Notification Center (bundled app only). Same versions as in Cargo.lock.
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSound", "UNNotificationTrigger", "UNUserNotificationCenter"] }
+block2 = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Same major as gpui-webview; needed to init GTK before creating per-profile WebContexts.

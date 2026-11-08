@@ -114,7 +114,7 @@ fn activate_page(view: &wry::WebView) {
     let _ = view.focus();
 }
 
-// Shortcut/LoadFailed/Notify come from WebKitGTK signals only; Favicon also from macOS.
+// Shortcut/LoadFailed come from WebKitGTK signals only; Favicon and Notify also from macOS.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub enum HostEvent {
@@ -125,8 +125,9 @@ pub enum HostEvent {
     LoadFinished(AppId, String),
     /// The engine reported a load failure (URL redacted, short reason).
     LoadFailed(AppId, String, String),
-    /// A page asked for a desktop notification and the user opted in (UX-013).
-    Notify(AppId, String, String),
+    /// A page showed a notification and the app's notifications are on: app, the page's
+    /// notification id (macOS, for click routing; 0 on Linux), title, body.
+    Notify(AppId, u64, String, String),
     Title(AppId, String),
     /// A navigation was refused by policy (URL already redacted).
     Blocked(String),
@@ -243,8 +244,11 @@ struct Hosted {
 
 pub struct WryHost {
     data_dir: std::path::PathBuf,
-    /// Global opt-in for page notifications (default off: requests are denied).
-    notifications: Arc<AtomicBool>,
+    /// Per-app notification switch (absent = on). Shared with the native callbacks.
+    notify_flags: HashMap<AppId, Arc<AtomicBool>>,
+    /// Spell checking on/off and languages (Linux; macOS uses the system's languages).
+    spell_on: bool,
+    spell_langs: Vec<String>,
     views: HashMap<AppId, Hosted>,
     /// Last visibility we applied to each native view. `show_only` runs on every UI event,
     /// so only real changes may reach the native view (repeated show/hide/focus calls make
@@ -259,7 +263,9 @@ impl WryHost {
         let (tx, rx) = async_channel::bounded(256);
         Self {
             data_dir,
-            notifications: Arc::new(AtomicBool::new(false)),
+            notify_flags: HashMap::new(),
+            spell_on: true,
+            spell_langs: Vec::new(),
             views: HashMap::new(),
             applied: HashMap::new(),
             tx,
@@ -267,8 +273,52 @@ impl WryHost {
         }
     }
 
-    pub fn set_notifications(&self, on: bool) {
-        self.notifications.store(on, Ordering::Relaxed);
+    fn notify_flag(&mut self, app: AppId) -> Arc<AtomicBool> {
+        self.notify_flags
+            .entry(app)
+            .or_insert_with(|| Arc::new(AtomicBool::new(true)))
+            .clone()
+    }
+
+    /// Switch one app's page notifications. Takes effect at once: Linux drops them in the
+    /// signal handler, macOS also tells the page (its `Notification.permission`).
+    pub fn set_app_notifications(&mut self, cx: &mut App, app: AppId, on: bool) {
+        self.notify_flag(app).store(on, Ordering::Relaxed);
+        #[cfg(target_os = "macos")]
+        if let Some(h) = self.views.get(&app) {
+            let _ = h.view.read(cx).raw().evaluate_script(&format!(
+                "window.__gpuidiumNotify && window.__gpuidiumNotify.setPermission({on})"
+            ));
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = cx;
+    }
+
+    /// Spell checking for all views, now and for views created later.
+    pub fn set_spellcheck(&mut self, cx: &mut App, on: bool, langs: &[String]) {
+        self.spell_on = on;
+        self.spell_langs = langs.to_vec();
+        #[cfg(target_os = "linux")]
+        for h in self.views.values() {
+            use webkit2gtk::WebViewExt as _;
+            use wry::WebViewExtUnix as _;
+            if let Some(ctx) = h.view.read(cx).raw().webview().context() {
+                apply_spellcheck(&ctx, on, langs);
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            // WebKit keeps one process-wide state; flipping it through any view updates all.
+            use wry::WebViewExtMacOS as _;
+            if crate::mac::spellcheck_default() != on {
+                match self.views.values().next() {
+                    Some(h) => crate::mac::toggle_spellcheck(&h.view.read(cx).raw().webview()),
+                    None => crate::mac::set_spellcheck_default(on),
+                }
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let _ = cx;
     }
 
     pub fn ids(&self) -> Vec<AppId> {
@@ -346,6 +396,89 @@ impl WryHost {
     }
 }
 
+#[cfg(target_os = "macos")]
+impl WryHost {
+    /// Collect queued page notifications (`js/notify_shim.js`) from every view whose app
+    /// has notifications on. Called from the shell's 1 s tick.
+    pub fn poll_notifications(&self, cx: &App) {
+        for (&app, h) in &self.views {
+            let on = self
+                .notify_flags
+                .get(&app)
+                .is_none_or(|f| f.load(Ordering::Relaxed));
+            if !on {
+                continue;
+            }
+            let tx = self.tx.clone();
+            let _ = h.view.read(cx).raw().evaluate_script_with_callback(
+                "window.__gpuidiumNotify ? window.__gpuidiumNotify.take() : '[]'",
+                move |res| {
+                    for (id, title, body) in parse_notifications(&res) {
+                        let _ = tx.try_send(HostEvent::Notify(app, id, title, body));
+                    }
+                },
+            );
+        }
+    }
+
+    /// The user clicked a system notification: fire the page's own click handler.
+    pub fn click_notification(&self, cx: &App, app: AppId, id: u64) {
+        if let Some(h) = self.views.get(&app) {
+            let _ = h.view.read(cx).raw().evaluate_script(&format!(
+                "window.__gpuidiumNotify && window.__gpuidiumNotify.click({id})"
+            ));
+        }
+    }
+}
+
+/// Parse the shim's queue. `evaluate_script` returns the JS string JSON-encoded, so the
+/// value is decoded twice. Malformed input yields nothing; texts are clipped again here.
+#[cfg(target_os = "macos")]
+fn parse_notifications(res: &str) -> Vec<(u64, String, String)> {
+    let inner: String = match serde_json::from_str(res) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let Ok(serde_json::Value::Array(items)) = serde_json::from_str(&inner) else {
+        return Vec::new();
+    };
+    let clip = |v: Option<&serde_json::Value>, n: usize| -> String {
+        v.and_then(|v| v.as_str())
+            .unwrap_or("")
+            .chars()
+            .take(n)
+            .collect()
+    };
+    items
+        .iter()
+        .take(50)
+        .filter_map(|it| {
+            let id = it.get("id")?.as_u64()?;
+            Some((id, clip(it.get("title"), 200), clip(it.get("body"), 500)))
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn apply_spellcheck(ctx: &webkit2gtk::WebContext, on: bool, langs: &[String]) {
+    use webkit2gtk::WebContextExt as _;
+    ctx.set_spell_checking_enabled(on);
+    // No choice: the user's locale (WebKitGTK would otherwise keep the previous list).
+    let langs: Vec<String> = if langs.is_empty() {
+        std::env::var("LANG")
+            .ok()
+            .and_then(|l| gpuidium_core::spell::locale_language(&l))
+            .into_iter()
+            .collect()
+    } else {
+        langs.to_vec()
+    };
+    if !langs.is_empty() {
+        let refs: Vec<&str> = langs.iter().map(String::as_str).collect();
+        ctx.set_spell_checking_languages(&refs);
+    }
+}
+
 /// Decode the page's hex-encoded PNG and accept it only if it really is a small PNG.
 #[cfg(target_os = "macos")]
 fn favicon_png_from_hex(res: &str) -> Option<Vec<u8>> {
@@ -417,6 +550,15 @@ impl WebviewHost for WryHost {
                 .with_document_title_changed_handler(move |title| {
                     let _ = t_title.try_send(HostEvent::Title(app, title));
                 });
+        #[cfg(target_os = "macos")]
+        let builder = {
+            let on = self.notify_flag(app).load(Ordering::Relaxed);
+            let shim = include_str!("js/notify_shim.js").replace(
+                "__GPUIDIUM_PERMISSION__",
+                if on { "granted" } else { "denied" },
+            );
+            builder.with_initialization_script_for_main_only(shim, true)
+        };
 
         let webview =
             WebView::build(builder, window, cx).map_err(|e| HostError::Native(e.to_string()))?;
@@ -473,13 +615,16 @@ impl WebviewHost for WryHost {
                 }
                 None => gtk::glib::Propagation::Proceed,
             });
-            // Every permission (camera, location, ...) is denied; only notifications
-            // may be allowed, and only while the user's global opt-in is on.
-            let flag = self.notifications.clone();
+            if let Some(ctx) = gtk_view.context() {
+                apply_spellcheck(&ctx, self.spell_on, &self.spell_langs);
+            }
+            // Every permission (camera, location, ...) is denied; only notifications may be
+            // allowed, and only while this app's notifications are on.
+            let flag = self.notify_flag(app);
             gtk_view.connect_permission_request(move |_, req| {
                 let is_notification = req.is::<webkit2gtk::NotificationPermissionRequest>();
                 log(&format!(
-                    "permission request {}: notification={is_notification} opted_in={}",
+                    "permission request {}: notification={is_notification} app_on={}",
                     req.type_().name(),
                     flag.load(Ordering::Relaxed)
                 ));
@@ -490,7 +635,7 @@ impl WebviewHost for WryHost {
                 }
                 true
             });
-            let (flag, t_note) = (self.notifications.clone(), self.tx.clone());
+            let (flag, t_note) = (self.notify_flag(app), self.tx.clone());
             gtk_view.connect_show_notification(move |_, n| {
                 if flag.load(Ordering::Relaxed) {
                     use webkit2gtk::NotificationExt as _;
@@ -499,7 +644,7 @@ impl WebviewHost for WryHost {
                             .unwrap_or_default()
                     };
                     let _ =
-                        t_note.try_send(HostEvent::Notify(app, clip(n.title()), clip(n.body())));
+                        t_note.try_send(HostEvent::Notify(app, 0, clip(n.title()), clip(n.body())));
                 }
                 true
             });
@@ -602,7 +747,31 @@ impl WebviewHost for WryHost {
 
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
-    use super::favicon_png_from_hex;
+    use super::{favicon_png_from_hex, parse_notifications};
+
+    #[test]
+    fn parses_the_shim_queue_and_clips() {
+        // As delivered by evaluate_script: the JS string, JSON-encoded once more.
+        let queue =
+            r#"[{"id":1,"title":"Anna","body":"Hi"},{"id":2,"title":"B"},{"title":"no id"}]"#;
+        let res = serde_json::to_string(queue).unwrap();
+        assert_eq!(
+            parse_notifications(&res),
+            vec![
+                (1, "Anna".into(), "Hi".into()),
+                (2, "B".into(), String::new())
+            ]
+        );
+        let long = format!(r#"[{{"id":3,"title":"{}","body":""}}]"#, "x".repeat(500));
+        assert_eq!(
+            parse_notifications(&serde_json::to_string(&long).unwrap())[0]
+                .1
+                .len(),
+            200
+        );
+        assert!(parse_notifications("garbage").is_empty());
+        assert!(parse_notifications(r#""{\"not\":\"array\"}""#).is_empty());
+    }
 
     fn tiny_png() -> Vec<u8> {
         let mut out = std::io::Cursor::new(Vec::new());

@@ -31,6 +31,8 @@ pub fn open(url: &str) -> bool {
 /// desktop's notification service and, inside Flatpak, to the notification portal. Falls back
 /// to `notify-send` (arguments passed after `--`, never through a shell). Title/body are
 /// clipped. Returns false if neither path worked.
+// macOS delivers through `mac::notify` (Notification Center).
+#[cfg(not(target_os = "macos"))]
 pub fn notify(app: &str, title: &str, body: &str) -> bool {
     #[cfg(target_os = "linux")]
     {

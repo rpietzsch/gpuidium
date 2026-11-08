@@ -110,6 +110,15 @@ tasks:
       - scripts/package-macos.sh
     platforms: [darwin]
 
+  install:macos:
+    desc: Build the app bundle and copy it to /Applications (replaces an existing GPUIdium.app; quit it first)
+    deps: [package:macos]
+    cmds:
+      - rm -rf /Applications/GPUIdium.app
+      - ditto dist/GPUIdium.app /Applications/GPUIdium.app
+      - echo "installed /Applications/GPUIdium.app"
+    platforms: [darwin]
+
   release:linux:
     desc: Package, checksum and (with GPUIDIUM_SIGN_KEY set) GPG-sign the Linux tarball, then verify it
     cmds:

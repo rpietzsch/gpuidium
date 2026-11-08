@@ -42,6 +42,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.4.0" date="2026-11-08">
+      <description>
+        <p>Unread badges on the sidebar icons, page notifications switchable per app (on by default), spell checking with several dictionaries at once.</p>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-11-08">
       <description>
         <p>No changes for Linux (macOS app bundle only).</p>

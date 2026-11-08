@@ -6,6 +6,32 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-08
+
+Unread badges, per-app notifications and spell checking. Packages are still Linux only.
+
+### Added
+- Unread badges: the sidebar shows the unread count from the page title (for example
+  "(3) WhatsApp") or a dot for news without a count; on macOS the Dock icon shows the total.
+- Page notifications per app, on by default (Manage: "Notifications" next to each app). macOS:
+  in Notification Center for the app bundle; a click opens the app and the page's target (for
+  example the chat). Linux: the desktop notification service as before.
+- Spell checking with a switch in Manage. Linux: choose several dictionaries at once (for
+  example en_US and de_DE). macOS: the system spell checker detects the language per word
+  among the languages set in System Settings.
+- macOS: `task install:macos` builds the app and copies it to `/Applications`;
+  `GPUIDIUM_UNIVERSAL=1 scripts/package-macos.sh` builds a universal (Apple Silicon + Intel)
+  app. macOS is built locally only: no CI job and no download, as the app is not notarized.
+
+### Fixed
+- macOS: arrow keys, Home/End, Page Up/Down and F-keys reach web pages as key events. Before,
+  Up/Down could not browse pickers such as Mattermost's Cmd+K channel switcher, and keys the
+  page did not handle typed "no glyph" boxes or control characters into the field.
+
+### Changed
+- The global "Page notifications" opt-in is replaced by the per-app switch; all apps start
+  with notifications on.
+
 ## [0.3.1] - 2026-11-08
 
 macOS app bundle. No changes for Linux.
