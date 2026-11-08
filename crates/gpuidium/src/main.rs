@@ -1658,6 +1658,8 @@ fn main() {
         ]);
         #[cfg(target_os = "macos")]
         install_menus(cx);
+        #[cfg(target_os = "macos")]
+        icon::set_dock_icon();
         let opts = WindowOptions {
             icon: icon::window_icon(),
             ..WindowOptions::default()

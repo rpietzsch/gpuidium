@@ -1,4 +1,4 @@
-# Packaging (Linux)
+# Packaging
 
 One application id everywhere: **`io.github.rpietzsch.GPUIdium`** (desktop file, icon, AppStream metadata). The binary is `gpuidium`. Files live in `packaging/`.
 
@@ -9,6 +9,21 @@ One application id everywhere: **`io.github.rpietzsch.GPUIdium`** (desktop file,
 | `.rpm` | `[package.metadata.generate-rpm]` | `cargo build --release -p gpuidium && cargo generate-rpm -p crates/gpuidium` | Fedora and the RPM family. |
 | Arch | `packaging/arch/PKGBUILD` | `cd packaging/arch && makepkg -f` | Builds from the tagged GitHub tarball; set `GPUIDIUM_SRC=/path/to/tar.gz` to build from your own. Run `updpkgsums` after tagging. |
 | Tarball | `scripts/package-linux.sh` | `task package:linux` | Relocatable, plus `.sha256`; `task release:linux` adds a GPG signature. |
+
+## macOS app bundle (experimental)
+
+`task package:macos` (`scripts/package-macos.sh`) builds `dist/GPUIdium.app` and `dist/gpuidium-<ver>-macos-<arch>.zip` (+ `.sha256`) for the host architecture: release binary, `Info.plist` from `packaging/macos/Info.plist` (bundle id `io.github.rpietzsch.GPUIdium`, minimum macOS 14), `AppIcon.icns`, ad-hoc signature. Copy the app to `/Applications`. The Dock, Cmd+Tab and Finder show the icon from the bundle; unbundled runs (`task run`) set the same icon at runtime.
+
+The icon assets (`packaging/macos/AppIcon.icns`, `crates/gpuidium/assets/icon-macos-512.png`) are generated from the SVG by `scripts/make-macos-icon.sh` (needs `rsvg-convert`), padded to Apple's icon grid.
+
+**Logins when switching from `task run` to the app:** WebKit keeps each profile's data under a folder named after the bundle id, so the app does not see the data of unbundled runs (`~/Library/WebKit/gpuidium/`). Config and app list are shared (`~/Library/Application Support/GPUIdium`). To keep the logins, quit GPUIdium and move the stores once (tested: cookies and localStorage carry over):
+
+```sh
+mkdir -p ~/Library/WebKit/io.github.rpietzsch.GPUIdium
+mv ~/Library/WebKit/gpuidium/WebsiteDataStore ~/Library/WebKit/io.github.rpietzsch.GPUIdium/
+```
+
+Not done: universal (arm64 + x86_64) binary, Developer ID signing and notarization (an ad-hoc signed app downloaded from elsewhere is blocked by Gatekeeper), DMG, CI build.
 
 ## Why the system WebKitGTK
 GPUIdium renders pages with the system WebKitGTK instead of bundling an engine. The package stays small and the distribution (or the Flatpak runtime) ships the engine's security fixes. The cost: we depend on `webkit2gtk-4.1` >= 2.40 and on GTK 3.

@@ -6,6 +6,16 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-08
+
+macOS app bundle. No changes for Linux.
+
+### Added
+- macOS: `task package:macos` builds `GPUIdium.app` (and a zip) with the app icon in the Dock,
+  Cmd+Tab and Finder; unbundled runs also show the icon. Ad-hoc signed, host architecture
+  only. Moving from `task run` to the app needs a one-time move of the WebKit data to keep
+  logins, see `docs/packaging.md`.
+
 ## [0.3.0] - 2026-11-08
 
 Adds page zoom and better behaviour for web apps with their own shortcuts. First version that
@@ -81,6 +91,7 @@ First usable release after the 0.0.1 pre-alpha, for Linux (X11 and XWayland). Wi
 - In Flatpak, export and import use fixed files inside the app's config folder (no file
   dialog yet).
 
-[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.3.1
 [0.3.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.3.0
 [0.2.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.2.0
