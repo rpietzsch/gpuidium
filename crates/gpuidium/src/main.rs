@@ -8,8 +8,10 @@
 mod external;
 mod host;
 mod icon;
+#[cfg(target_os = "macos")]
+mod mac;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -24,6 +26,7 @@ use gpui_kit::{
 };
 use gpuidium_core::{
     AppId, AppState, Command, Event, ProfileId, RemoveMode,
+    badge::{self, Badge},
     diagnostics::{log, redact_url},
     exchange,
     instance::InstanceLock,
@@ -183,6 +186,14 @@ struct Shell {
     settings: Settings,
     /// Per-app page zoom in percent (absent = 100 %).
     zoom: BTreeMap<AppId, u16>,
+    /// Apps whose page notifications are off (default: on).
+    notifications_off: BTreeSet<AppId>,
+    /// Apps that notified while in the background: a dot until they are opened.
+    unseen: HashSet<AppId>,
+    /// Last Dock badge set (macOS), to avoid redundant updates.
+    dock_label: Option<String>,
+    /// Installed spell-check dictionaries (Linux; macOS uses the system's languages).
+    spell_dicts: Vec<String>,
     config_dir: PathBuf,
     data_dir: PathBuf,
     host: WryHost,
@@ -216,6 +227,7 @@ impl Shell {
         window_cfg: WindowConfig,
         settings: Settings,
         zoom: BTreeMap<AppId, u16>,
+        notifications_off: BTreeSet<AppId>,
         config_dir: PathBuf,
         data_dir: PathBuf,
         status: String,
@@ -247,8 +259,30 @@ impl Shell {
             .detach();
         }
 
-        let host = WryHost::new(data_dir.clone());
-        host.set_notifications(settings.notifications);
+        let mut host = WryHost::new(data_dir.clone());
+        for &app in &notifications_off {
+            host.set_app_notifications(cx, app, false);
+        }
+        host.set_spellcheck(cx, settings.spellcheck, &settings.spell_languages);
+
+        // macOS: a click on a system notification switches to its app and runs the page's
+        // own click handler (e.g. opens the chat).
+        #[cfg(target_os = "macos")]
+        {
+            let (tx, clicks) = async_channel::unbounded();
+            mac::init_notifications(tx);
+            cx.spawn_in(window, async move |this, cx| {
+                while let Ok((app, note)) = clicks.recv().await {
+                    let r = this.update_in(cx, |this, window, cx| {
+                        this.open_from_notification(app, note, window, cx)
+                    });
+                    if r.is_err() {
+                        break;
+                    }
+                }
+            })
+            .detach();
+        }
 
         // Native events (shortcuts, loads, titles, favicons) wake the UI the moment they are
         // sent; no polling, so a shortcut is handled right after the GTK callback returns.
@@ -292,6 +326,16 @@ impl Shell {
             window_cfg,
             settings,
             zoom,
+            notifications_off,
+            unseen: HashSet::new(),
+            dock_label: None,
+            spell_dicts: if cfg!(target_os = "linux") {
+                gpuidium_core::spell::installed_dictionaries(
+                    &gpuidium_core::spell::dictionary_dirs(),
+                )
+            } else {
+                Vec::new()
+            },
             config_dir,
             data_dir,
             host,
@@ -350,7 +394,13 @@ impl Shell {
 
     fn save(&mut self) {
         let mut cfg = Config::from_state(&self.state, self.window_cfg);
-        cfg.settings = self.settings;
+        cfg.settings = self.settings.clone();
+        cfg.notifications_off = self
+            .notifications_off
+            .iter()
+            .filter(|id| self.state.get(**id).is_some())
+            .copied()
+            .collect();
         // Only apps that still exist, and only non-default levels.
         cfg.zoom = self
             .zoom
@@ -381,6 +431,10 @@ impl Shell {
     fn activate_current(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.state.active() {
             self.last_active.insert(id, Instant::now());
+            // Opening an app counts as having seen its notifications.
+            if self.unseen.remove(&id) {
+                self.update_dock_badge();
+            }
             if !self.host.contains(id)
                 && let Some(app) = self.state.get(id).cloned()
             {
@@ -440,6 +494,9 @@ impl Shell {
     }
 
     fn tick(&mut self, ticks: u32, cx: &mut Context<Self>) {
+        // macOS: collect page notifications queued by the in-page shim.
+        #[cfg(target_os = "macos")]
+        self.host.poll_notifications(cx);
         // Status line is transient: it vanishes five seconds after it last changed.
         if self.status != self.status_seen {
             self.status_seen = self.status.clone();
@@ -538,19 +595,36 @@ impl Shell {
                 HostEvent::OpenedExternally(u) => {
                     self.status = format!("Opened in system browser: {u}")
                 }
-                HostEvent::Notify(id, title, body) => {
+                HostEvent::Notify(id, note, title, body) => {
+                    if self.notifications_off.contains(&id) {
+                        continue;
+                    }
                     let name = self
                         .state
                         .get(id)
                         .map(|a| a.name.clone())
                         .unwrap_or_default();
-                    if !external::notify(&name, &title, &body) {
-                        self.status =
-                            "Notification could not be shown (notify-send missing?)".into();
+                    #[cfg(target_os = "macos")]
+                    let shown = mac::notify(id, &name, note, &title, &body);
+                    #[cfg(not(target_os = "macos"))]
+                    let shown = {
+                        let _ = note;
+                        external::notify(&name, &title, &body)
+                    };
+                    if !shown {
+                        self.status = "Notification could not be shown".into();
+                    }
+                    // A dot until the app is opened, unless it is what the user looks at.
+                    let in_view = self.state.active() == Some(id)
+                        && self.panel == Panel::None
+                        && window.is_window_active();
+                    if !in_view {
+                        self.unseen.insert(id);
                     }
                 }
             }
         }
+        self.update_dock_badge();
         self.sync_views(cx);
         cx.notify();
     }
@@ -903,11 +977,136 @@ impl Shell {
         cx.notify();
     }
 
-    fn toggle_notifications(&mut self, cx: &mut Context<Self>) {
-        self.settings.notifications = !self.settings.notifications;
-        self.host.set_notifications(self.settings.notifications);
+    fn toggle_app_notifications(&mut self, id: AppId, cx: &mut Context<Self>) {
+        let on = self.notifications_off.remove(&id);
+        if !on {
+            self.notifications_off.insert(id);
+            self.unseen.remove(&id);
+        }
+        self.host.set_app_notifications(cx, id, on);
+        self.save();
+        self.update_dock_badge();
+        cx.notify();
+    }
+
+    fn toggle_spellcheck(&mut self, cx: &mut Context<Self>) {
+        self.settings.spellcheck = !self.settings.spellcheck;
+        self.host
+            .set_spellcheck(cx, self.settings.spellcheck, &self.settings.spell_languages);
         self.save();
         cx.notify();
+    }
+
+    /// Linux: add or remove one dictionary; all chosen ones are used at the same time.
+    fn toggle_spell_language(&mut self, lang: String, cx: &mut Context<Self>) {
+        let langs = &mut self.settings.spell_languages;
+        match langs.iter().position(|l| *l == lang) {
+            Some(i) => {
+                langs.remove(i);
+            }
+            None => langs.push(lang),
+        }
+        langs.sort();
+        self.host
+            .set_spellcheck(cx, self.settings.spellcheck, &self.settings.spell_languages);
+        self.save();
+        cx.notify();
+    }
+
+    /// What the sidebar shows on an app's icon.
+    fn badge_for(&self, id: AppId) -> Badge {
+        let title = self
+            .pages
+            .get(&id)
+            .map(|p| badge::from_title(&p.title))
+            .unwrap_or_default();
+        badge::combine(title, self.unseen.contains(&id))
+    }
+
+    /// macOS: total unread on the Dock icon. Only changes reach AppKit.
+    fn update_dock_badge(&mut self) {
+        let label = badge::total_label(self.state.apps().iter().map(|a| self.badge_for(a.id)));
+        if label != self.dock_label {
+            #[cfg(target_os = "macos")]
+            mac::set_dock_badge(label.as_deref());
+            self.dock_label = label;
+        }
+    }
+
+    /// A click on a system notification: bring the window forward, show the app, and let
+    /// the page handle the click.
+    #[cfg(target_os = "macos")]
+    fn open_from_notification(
+        &mut self,
+        app: AppId,
+        note: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.state.get(app).is_none() {
+            return;
+        }
+        cx.activate(true);
+        window.activate_window();
+        self.choose(app, window, cx);
+        self.host.click_notification(cx, app, note);
+    }
+
+    /// Spell-check languages. Linux: every installed dictionary as a toggle, all chosen ones
+    /// at once. macOS: the system spell checker picks the language per word among the
+    /// languages set in System Settings.
+    fn spell_languages_row(&self, cx: &mut Context<Self>) -> AnyElement {
+        let note = |t: String| {
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(t)
+        };
+        if cfg!(target_os = "macos") {
+            return div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(Button::new("spell-langs").label("Spelling languages…").ghost().on_click(
+                    cx.listener(|_, _, _, _| {
+                        #[cfg(target_os = "macos")]
+                        mac::open_spelling_settings();
+                    }),
+                ))
+                .child(note(
+                    "macOS checks each word against all spelling languages set in System Settings › Keyboard › Text Input."
+                        .into(),
+                ))
+                .into_any_element();
+        }
+        if self.spell_dicts.is_empty() {
+            return note(
+                "No hunspell dictionaries found; install e.g. hunspell-en-us and hunspell-de-de."
+                    .into(),
+            )
+            .into_any_element();
+        }
+        let chosen = &self.settings.spell_languages;
+        let mut row =
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_1()
+                .child(note(if chosen.is_empty() {
+                    "Languages (none chosen: system language):".into()
+                } else {
+                    "Languages:".into()
+                }));
+        for (i, lang) in self.spell_dicts.iter().enumerate() {
+            let on = chosen.contains(lang);
+            let l = lang.clone();
+            let b = Button::new(("lang", i)).label(lang.clone()).on_click(
+                cx.listener(move |this, _, _, cx| this.toggle_spell_language(l.clone(), cx)),
+            );
+            row = row.child(if on { b.primary() } else { b.ghost() });
+        }
+        row.into_any_element()
     }
 
     fn current_origin(&self) -> String {
@@ -963,8 +1162,44 @@ impl Shell {
                 Some(t) => format!("{} - {t}", app.name),
                 None => app.name.clone(),
             };
+            // The badge sits inside the 28 px tile, over the favicon's top-right corner: the
+            // scrolling icon column clips anything that sticks out of the tile.
+            let badge = match self.badge_for(id) {
+                Badge::None => None,
+                Badge::Dot => Some(
+                    div()
+                        .absolute()
+                        .top(px(3.))
+                        .right(px(3.))
+                        .size(px(7.))
+                        .rounded_full()
+                        .bg(cx.theme().danger)
+                        .into_any_element(),
+                ),
+                b @ Badge::Count(_) => Some(
+                    div()
+                        .absolute()
+                        .top(px(1.))
+                        .right(px(1.))
+                        .h(px(11.))
+                        .min_w(px(11.))
+                        .px(px(2.))
+                        .rounded_full()
+                        .bg(cx.theme().danger)
+                        .text_color(cx.theme().danger_foreground)
+                        .text_size(px(8.))
+                        .line_height(px(11.))
+                        .font_weight(gpui_kit::FontWeight::BOLD)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(b.label().unwrap_or_default())
+                        .into_any_element(),
+                ),
+            };
             let icon = div()
                 .id(("app", i))
+                .relative()
                 .size(px(28.))
                 .flex_none()
                 .rounded_md()
@@ -996,7 +1231,8 @@ impl Shell {
                 .tooltip(move |window, cx| {
                     gpui_kit::component::tooltip::Tooltip::new(label.clone()).build(window, cx)
                 })
-                .child(face);
+                .child(face)
+                .children(badge);
             icons = icons.child(icon);
         }
         let small = |id: &'static str, glyph: &'static str| {
@@ -1336,6 +1572,18 @@ impl Shell {
                                     this.apply(Command::MoveDown(id), w, cx)
                                 })),
                         )
+                        .child(
+                            Button::new(("notif", i))
+                                .label(if self.notifications_off.contains(&id) {
+                                    "Notifications: Off"
+                                } else {
+                                    "Notifications: On"
+                                })
+                                .ghost()
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.toggle_app_notifications(id, cx)
+                                })),
+                        )
                         .child(Button::new(("edit", i)).label("Edit").ghost().on_click(
                             cx.listener(move |this, _, w, cx| this.begin_edit(id, w, cx)),
                         ))
@@ -1378,19 +1626,26 @@ impl Shell {
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new("notif")
+                        Button::new("spell")
                             .label(format!(
-                                "Page notifications: {}",
-                                if self.settings.notifications { "On" } else { "Off" }
+                                "Spell checking: {}",
+                                if self.settings.spellcheck { "On" } else { "Off" }
                             ))
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_notifications(cx))),
+                            .on_click(cx.listener(|this, _, _, cx| this.toggle_spellcheck(cx))),
                     )
                     .child(
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("Applies to all apps. Off: every permission request is denied."),
+                            .child("Underlines misspelled words in page text fields; right-click for suggestions."),
                     ),
+            )
+            .child(self.spell_languages_row(cx))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Page notifications are switched per app (Notifications button next to each app)."),
             );
 
         // Retained data and list exchange.
@@ -1619,8 +1874,12 @@ fn main() {
     }
 
     let window_cfg = loaded.config.window;
-    let settings = loaded.config.settings;
+    let settings = loaded.config.settings.clone();
     let zoom = loaded.config.zoom.clone();
+    let notifications_off = loaded.config.notifications_off.clone();
+    // WebKit reads its spell-checking switch when the first view starts.
+    #[cfg(target_os = "macos")]
+    mac::set_spellcheck_default(settings.spellcheck);
     let state = loaded.config.to_state();
 
     #[cfg(target_os = "linux")]
@@ -1667,7 +1926,16 @@ fn main() {
         let (_, shell) = gpui_kit::open_window(opts, cx, move |window, cx| {
             cx.new(|cx| {
                 Shell::new(
-                    state, window_cfg, settings, zoom, config_dir, data_dir, status, window, cx,
+                    state,
+                    window_cfg,
+                    settings,
+                    zoom,
+                    notifications_off,
+                    config_dir,
+                    data_dir,
+                    status,
+                    window,
+                    cx,
                 )
             })
         })

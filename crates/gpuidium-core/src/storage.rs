@@ -3,7 +3,7 @@
 //! `config.json` holds only app metadata. Cookies, tokens and other browsing
 //! data live in engine-owned profile directories and never in this file.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -32,15 +32,29 @@ impl Default for WindowConfig {
     }
 }
 
-/// User options (all off by default; additive, so schema stays at v1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// User options (additive, so schema stays at v1). Page notifications are per app
+/// (`Config::notifications_off`); the old global `notifications` key is ignored.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     /// LIFE-010: close the native view of apps inactive for this many minutes.
     /// Persistent cookies/storage survive; in-page state does not.
     pub unload_inactive_minutes: Option<u32>,
-    /// UX-013: let pages show desktop notifications (opt-in, global).
-    pub notifications: bool,
+    /// Spell checking in page text fields (on by default).
+    pub spellcheck: bool,
+    /// Spell-check languages (e.g. `en_US`, `de_DE`), all used at once. Empty: the system's
+    /// default. Linux only; macOS detects the language among the system's spelling languages.
+    pub spell_languages: Vec<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            unload_inactive_minutes: None,
+            spellcheck: true,
+            spell_languages: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +68,9 @@ pub struct Config {
     pub window: WindowConfig,
     #[serde(default)]
     pub settings: Settings,
+    /// Apps whose page notifications are switched off (notifications are on by default).
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub notifications_off: BTreeSet<AppId>,
     /// Per-app page zoom in percent; apps at 100 % are not listed (additive, schema v1).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub zoom: BTreeMap<AppId, u16>,
@@ -67,6 +84,7 @@ impl Default for Config {
             active_app_id: None,
             window: WindowConfig::default(),
             settings: Settings::default(),
+            notifications_off: BTreeSet::new(),
             zoom: BTreeMap::new(),
         }
     }
@@ -100,6 +118,7 @@ impl Config {
             active_app_id: state.active(),
             window,
             settings: Settings::default(),
+            notifications_off: BTreeSet::new(),
             zoom: BTreeMap::new(),
         }
     }
@@ -259,11 +278,17 @@ pub fn load(dir: &Path) -> Result<Loaded, StorageError> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn settings_default_off_and_old_configs_still_load() {
+    fn settings_defaults_and_old_configs_still_load() {
         let old = br#"{"schema_version":1,"apps":[],"active_app_id":null}"#;
         let c = super::Config::parse(old).unwrap();
         assert_eq!(c.settings, super::Settings::default());
-        assert!(!c.settings.notifications && c.settings.unload_inactive_minutes.is_none());
+        assert!(c.settings.unload_inactive_minutes.is_none());
+        // Spell checking defaults on; notifications default on (nobody is in the off list).
+        assert!(c.settings.spellcheck && c.settings.spell_languages.is_empty());
+        assert!(c.notifications_off.is_empty());
+        // The pre-0.4 global notification switch is ignored, not an error.
+        let older = br#"{"schema_version":1,"apps":[],"settings":{"notifications":false}}"#;
+        assert!(super::Config::parse(older).unwrap().settings.spellcheck);
     }
 
     use super::*;

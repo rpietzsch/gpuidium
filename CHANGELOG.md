@@ -6,6 +6,29 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-08
+
+Unread badges, per-app notifications and spell checking. First release with a macOS download.
+
+### Added
+- Unread badges: the sidebar shows the unread count from the page title (for example
+  "(3) WhatsApp") or a dot for news without a count; on macOS the Dock icon shows the total.
+- Page notifications per app, on by default (Manage: "Notifications" next to each app). macOS:
+  in Notification Center for the app bundle; a click opens the app and the page's target (for
+  example the chat). Linux: the desktop notification service as before.
+- Spell checking with a switch in Manage. Linux: choose several dictionaries at once (for
+  example en_US and de_DE). macOS: the system spell checker detects the language per word
+  among the languages set in System Settings.
+- macOS: the release page has a universal `GPUIdium.app` zip (Apple Silicon and Intel), built
+  in CI. It is ad-hoc signed, not notarized: on first start, right-click the app and choose
+  Open (or run `xattr -dr com.apple.quarantine /Applications/GPUIdium.app`).
+- macOS: `task install:macos` builds the app and copies it to `/Applications`.
+- CI checks and packages on macOS too.
+
+### Changed
+- The global "Page notifications" opt-in is replaced by the per-app switch; all apps start
+  with notifications on.
+
 ## [0.3.1] - 2026-11-08
 
 macOS app bundle. No changes for Linux.
