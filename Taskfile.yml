@@ -63,7 +63,7 @@ tasks:
       - task: test
 
   test:isolation:
-    desc: Same-origin profile isolation + restart persistence (needs a display; PROFILE-002/004)
+    desc: Same-origin profile isolation + restart persistence (Linux/macOS, needs a display; PROFILE-002/004)
     cmds:
       - cargo build -q -p gpuidium --bin spike_isolation
       - cmd: |
@@ -73,6 +73,12 @@ tasks:
           # PROFILE-004: nothing may land in shared per-user default dirs.
           ! test -e "$HOME/.cache/spike_isolation" && ! test -e "$HOME/.local/share/spike_isolation"
         platforms: [linux]
+      - cmd: |
+          # macOS: one WKWebsiteDataStore per profile UUID (needs macOS 14+).
+          R=$(mktemp -d)
+          target/debug/spike_isolation "$R"
+          target/debug/spike_isolation "$R" --expect-persisted
+        platforms: [darwin]
 
   test:oidc:
     desc: Mock OIDC login flow persists across restart and stays per-profile (needs a display)
@@ -84,7 +90,7 @@ tasks:
           target/debug/spike_oidc "$R" --expect rp
           target/debug/spike_oidc "$R" --profile other --expect login
           target/debug/spike_oidc "$R" --expect rp
-        platforms: [linux]
+        platforms: [linux, darwin]
 
   bench:
     desc: Process-tree memory/CPU baseline (Linux, needs display + xdotool)

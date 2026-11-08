@@ -3001,7 +3001,7 @@ dependencies = [
 
 [[package]]
 name = "gpuidium"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3012,6 +3012,9 @@ dependencies = [
  "gtk",
  "image",
  "lb-wry",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "thiserror 2.0.21",
  "url",
  "webkit2gtk",
@@ -3019,7 +3022,7 @@ dependencies = [
 
 [[package]]
 name = "gpuidium-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "fd-lock",
  "idna",

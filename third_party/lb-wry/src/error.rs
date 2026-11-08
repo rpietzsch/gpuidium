@@ -74,4 +74,8 @@ pub enum Error {
   #[cfg(any(target_os = "macos", target_os = "ios"))]
   #[error("data store is currently opened")]
   DataStoreInUse,
+  /// GPUIdium patch: a data store identifier was requested but this OS cannot provide
+  /// one (macOS < 14, iOS < 17). Upstream silently used the shared default store.
+  #[error("per-identifier data stores need macOS 14 / iOS 17 or later")]
+  CustomDataStoreUnavailable,
 }

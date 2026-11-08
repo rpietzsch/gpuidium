@@ -42,6 +42,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.3.0" date="2026-11-08">
+      <description>
+        <p>Page zoom (Ctrl + plus, minus, 0), Ctrl+K and Ctrl+Shift shortcuts are left to web apps.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-11-07">
       <description>
         <p>First release for Linux (X11 and XWayland).</p>

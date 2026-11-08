@@ -100,6 +100,8 @@ pub(crate) fn download_did_finish(this: &WryDownloadDelegate, download: &WKDownl
   }
 }
 
+// `error` is only logged in debug builds.
+#[cfg_attr(not(debug_assertions), allow(unused_variables))]
 pub(crate) fn download_did_fail(
   this: &WryDownloadDelegate,
   download: &WKDownload,

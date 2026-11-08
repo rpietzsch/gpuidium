@@ -227,6 +227,21 @@ fn verdict(reports: &[Report], vals: &[(&str, String)], expect_persisted: bool) 
     (ok, out)
 }
 
+/// Same binding as `host::bind_profile_store`: on macOS WKWebView ignores the
+/// `WebContext` directory, so each profile needs its own `WKWebsiteDataStore`.
+fn bind_store(b: WebViewBuilder<'_>, profile: ProfileId) -> WebViewBuilder<'_> {
+    #[cfg(target_os = "macos")]
+    {
+        use wry::WebViewBuilderExtDarwin as _;
+        b.with_data_store_identifier(profile.as_uuid().into_bytes())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = profile;
+        b
+    }
+}
+
 fn main() {
     let mut args = std::env::args().skip(1);
     let root = PathBuf::from(
@@ -238,8 +253,11 @@ fn main() {
     // FINDING: WebContext::new() touches WebKitGTK, so GTK must already be initialized.
     // gpui-webview only does that inside WebView::build(), which is too late for
     // per-profile contexts. Init on the X11 backend first (gpui-webview then sees it done).
-    gtk::gdk::set_allowed_backends("x11");
-    gtk::init().expect("gtk init (is DISPLAY set / Xwayland running?)");
+    #[cfg(target_os = "linux")]
+    {
+        gtk::gdk::set_allowed_backends("x11");
+        gtk::init().expect("gtk init (is DISPLAY set / Xwayland running?)");
+    }
 
     let (port, reports) = start_server(&root);
     let (pa, pb) = profile_ids(&root);
@@ -249,7 +267,12 @@ fn main() {
         format!("http://127.0.0.1:{port}/?who={who}&val={val}&n={n}")
     };
 
-    gpui_kit::platform::linux(gpui_kit::WindowingModes::X11).run(move |cx| {
+    #[cfg(target_os = "linux")]
+    let app = gpui_kit::platform::linux(gpui_kit::WindowingModes::X11);
+    #[cfg(not(target_os = "linux"))]
+    let app = gpui_kit::application();
+
+    app.run(move |cx| {
         gpui_kit::init(cx);
         let (ua, ub) = (url("A", &val_a, 1), url("B", &val_b, 1));
         let (da, db) = (profile_dir(&root, pa), profile_dir(&root, pb));
@@ -260,13 +283,13 @@ fn main() {
                 let mut ctx_a = WebContext::new(Some(da));
                 let mut ctx_b = WebContext::new(Some(db));
                 let wa = WebView::build(
-                    WebViewBuilder::new_with_web_context(&mut ctx_a).with_url(ua),
+                    bind_store(WebViewBuilder::new_with_web_context(&mut ctx_a), pa).with_url(ua),
                     window,
                     cx,
                 )
                 .expect("webview A");
                 let wb = WebView::build(
-                    WebViewBuilder::new_with_web_context(&mut ctx_b).with_url(ub),
+                    bind_store(WebViewBuilder::new_with_web_context(&mut ctx_b), pb).with_url(ub),
                     window,
                     cx,
                 )

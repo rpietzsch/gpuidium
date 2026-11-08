@@ -10,6 +10,7 @@ pub mod policy;
 pub mod profiles;
 pub mod storage;
 pub mod uri;
+pub mod zoom;
 
 pub use model::{AppEntry, AppId, AppState, Command, Event, ProfileId, RemoveMode};
 pub use uri::{NormalizedUrl, UriError, normalize_input};
