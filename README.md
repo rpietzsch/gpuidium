@@ -33,6 +33,7 @@ task test:switching  # needs a display + xdotool: app switching keeps pages full
 task test:oidc       # needs a display: mock OIDC login survives restart, stays per-profile
 task bench           # process-tree memory/CPU baseline (needs display + xdotool)
 task package:linux   # dist/gpuidium-<ver>-linux-x86_64.tar.gz (+ .sha256)
+task package:macos   # dist/GPUIdium.app + zip (macOS, ad-hoc signed; see docs/packaging.md)
 task release:linux   # package + checksum + optional GPG signature + verification (docs/updates.md)
 ```
 

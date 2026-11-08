@@ -104,6 +104,12 @@ tasks:
       - scripts/package-linux.sh
     platforms: [linux]
 
+  package:macos:
+    desc: Build dist/GPUIdium.app and dist/gpuidium-<ver>-macos-<arch>.zip (ad-hoc signed)
+    cmds:
+      - scripts/package-macos.sh
+    platforms: [darwin]
+
   release:linux:
     desc: Package, checksum and (with GPUIDIUM_SIGN_KEY set) GPG-sign the Linux tarball, then verify it
     cmds:

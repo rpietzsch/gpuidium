@@ -6,6 +6,12 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- macOS: `task package:macos` builds `GPUIdium.app` (and a zip) with the app icon in the Dock,
+  Cmd+Tab and Finder; unbundled runs also show the icon. Ad-hoc signed, host architecture
+  only. Moving from `task run` to the app needs a one-time move of the WebKit data to keep
+  logins, see `docs/packaging.md`.
+
 ## [0.3.0] - 2026-11-08
 
 Adds page zoom and better behaviour for web apps with their own shortcuts. First version that
