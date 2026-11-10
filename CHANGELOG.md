@@ -6,6 +6,10 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-10
+
+macOS fix for page dialogs. No changes for Linux.
+
 ### Fixed
 - macOS: page dialogs from `alert()`, `confirm()` and `prompt()` did not appear (`confirm()`
   always returned false, `prompt()` null). They now show as native dialogs titled with the
@@ -122,7 +126,9 @@ First usable release after the 0.0.1 pre-alpha, for Linux (X11 and XWayland). Wi
 - In Flatpak, export and import use fixed files inside the app's config folder (no file
   dialog yet).
 
-[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.1
+[0.4.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.0
 [0.3.1]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.3.1
 [0.3.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.3.0
 [0.2.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.2.0
