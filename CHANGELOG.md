@@ -6,6 +6,11 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- macOS: page dialogs from `alert()`, `confirm()` and `prompt()` did not appear (`confirm()`
+  always returned false, `prompt()` null). They now show as native dialogs titled with the
+  page's host ("example.com says").
+
 ## [0.4.0] - 2026-11-08
 
 Unread badges, per-app notifications and spell checking. Packages are still Linux only.

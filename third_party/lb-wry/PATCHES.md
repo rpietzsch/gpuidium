@@ -12,3 +12,7 @@
 6. macOS build hygiene: deprecated `NS*KeyMask` constants replaced by `NSEventModifierFlags::*`; unneeded `unsafe`
    blocks removed; `WebViewId<'_>` lifetime spelled out; the still-needed `NSFilenamesPboardType` use is
    `#[allow(deprecated)]` (unchanged behaviour); release-only unused `NSObject` import / `error` parameter fixed. No functional change.
+7. macOS (`src/wkwebview/class/wry_web_view_ui_delegate.rs`, `Cargo.toml` features `NSAlert`, `NSTextField`): the
+   UI delegate implements `runJavaScriptAlertPanel…`, `…ConfirmPanel…` and `…TextInputPanel…` with a modal
+   `NSAlert` titled "<host> says". Without them WKWebView silently dropped `alert()`, `confirm()` returned false and
+   `prompt()` null. Intended for upstream submission.

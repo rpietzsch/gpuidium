@@ -10,10 +10,13 @@ use block2::Block;
 use objc2::DefinedClass;
 use objc2::{define_class, msg_send, rc::Retained, runtime::NSObject, MainThreadOnly};
 #[cfg(target_os = "macos")]
-use objc2_app_kit::{NSModalResponse, NSModalResponseOK, NSOpenPanel, NSWindowDelegate};
+use objc2_app_kit::{
+  NSAlert, NSAlertFirstButtonReturn, NSModalResponse, NSModalResponseOK, NSOpenPanel, NSTextField,
+  NSWindowDelegate,
+};
 use objc2_foundation::{MainThreadMarker, NSObjectProtocol};
 #[cfg(target_os = "macos")]
-use objc2_foundation::{NSArray, NSURL};
+use objc2_foundation::{NSArray, NSPoint, NSRect, NSSize, NSString, NSURL};
 
 #[cfg(target_os = "macos")]
 use objc2_web_kit::WKOpenPanelParameters;
@@ -122,6 +125,72 @@ define_class!(
           }
         }
       }
+    }
+
+    // GPUIdium patch: WKWebView drops `alert()`/`confirm()`/`prompt()` unless the UI delegate
+    // implements these three methods; without them alerts never show, `confirm()` returns false and
+    // `prompt()` returns null.
+    #[cfg(target_os = "macos")]
+    #[unsafe(method(webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:))]
+    fn run_javascript_alert(
+      &self,
+      _webview: &WryWebView,
+      message: &NSString,
+      frame: &WKFrameInfo,
+      handler: &block2::Block<dyn Fn()>,
+    ) {
+      if let Some(mtm) = MainThreadMarker::new() {
+        let alert = js_dialog(mtm, frame, message);
+        alert.addButtonWithTitle(&NSString::from_str("OK"));
+        alert.runModal();
+      }
+      handler.call(());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[unsafe(method(webView:runJavaScriptConfirmPanelWithMessage:initiatedByFrame:completionHandler:))]
+    fn run_javascript_confirm(
+      &self,
+      _webview: &WryWebView,
+      message: &NSString,
+      frame: &WKFrameInfo,
+      handler: &block2::Block<dyn Fn(objc2::runtime::Bool)>,
+    ) {
+      let mut ok = false;
+      if let Some(mtm) = MainThreadMarker::new() {
+        let alert = js_dialog(mtm, frame, message);
+        alert.addButtonWithTitle(&NSString::from_str("OK"));
+        alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+        ok = alert.runModal() == NSAlertFirstButtonReturn;
+      }
+      handler.call((objc2::runtime::Bool::new(ok),));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[unsafe(method(webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:))]
+    fn run_javascript_prompt(
+      &self,
+      _webview: &WryWebView,
+      prompt: &NSString,
+      default_text: Option<&NSString>,
+      frame: &WKFrameInfo,
+      handler: &block2::Block<dyn Fn(*mut NSString)>,
+    ) {
+      let mut answer: Option<Retained<NSString>> = None;
+      if let Some(mtm) = MainThreadMarker::new() {
+        let alert = js_dialog(mtm, frame, prompt);
+        alert.addButtonWithTitle(&NSString::from_str("OK"));
+        alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+        let field =
+          NSTextField::textFieldWithString(default_text.unwrap_or(&NSString::new()), mtm);
+        field.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(260.0, 24.0)));
+        alert.setAccessoryView(Some(&field));
+        alert.window().setInitialFirstResponder(Some(&field));
+        if alert.runModal() == NSAlertFirstButtonReturn {
+          answer = Some(field.stringValue());
+        }
+      }
+      handler.call((answer.as_ref().map_or(null_mut(), |s| Retained::as_ptr(s) as *mut NSString),));
     }
 
     #[unsafe(method(webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:))]
@@ -262,6 +331,22 @@ define_class!(
     }
   }
 );
+
+/// An `NSAlert` titled after the calling page's host ("example.com says"), like browsers do, so a
+/// page cannot pass its dialog off as one from GPUIdium.
+#[cfg(target_os = "macos")]
+fn js_dialog(mtm: MainThreadMarker, frame: &WKFrameInfo, message: &NSString) -> Retained<NSAlert> {
+  let host = unsafe { frame.securityOrigin().host() }.to_string();
+  let title = if host.is_empty() {
+    "This page says".to_string()
+  } else {
+    format!("{host} says")
+  };
+  let alert = NSAlert::new(mtm);
+  alert.setMessageText(&NSString::from_str(&title));
+  alert.setInformativeText(message);
+  alert
+}
 
 impl WryWebViewUIDelegate {
   pub fn new(
