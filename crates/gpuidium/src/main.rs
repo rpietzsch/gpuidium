@@ -1228,11 +1228,17 @@ impl Shell {
                 .on_drop(cx.listener(move |this, d: &DragApp, window, cx| {
                     this.reorder(d.0, i, window, cx)
                 }))
-                .tooltip(move |window, cx| {
-                    gpui_kit::component::tooltip::Tooltip::new(label.clone()).build(window, cx)
-                })
                 .child(face)
                 .children(badge);
+            // macOS: a GPUI tooltip would be hidden by the web view (see `mac::set_tooltip`).
+            #[cfg(target_os = "macos")]
+            let icon = icon.on_hover(move |hovered, window, _| {
+                mac::set_tooltip(window, hovered.then_some(label.as_str()))
+            });
+            #[cfg(not(target_os = "macos"))]
+            let icon = icon.tooltip(move |window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new(label.clone()).build(window, cx)
+            });
             icons = icons.child(icon);
         }
         let small = |id: &'static str, glyph: &'static str| {
