@@ -6,6 +6,10 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-11
+
+macOS fix for sidebar tooltips. No changes for Linux.
+
 ### Fixed
 - macOS: the tooltip of a sidebar icon was hidden behind the web page. It is now a native
   tooltip shown above the page.
@@ -130,7 +134,8 @@ First usable release after the 0.0.1 pre-alpha, for Linux (X11 and XWayland). Wi
 - In Flatpak, export and import use fixed files inside the app's config folder (no file
   dialog yet).
 
-[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.2
 [0.4.1]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.1
 [0.4.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.0
 [0.3.1]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.3.1

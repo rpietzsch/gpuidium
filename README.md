@@ -2,7 +2,7 @@
 
 A lightweight, keyboard-friendly [GPUI](https://gpui.rs) shell for web apps. Paste a URL, get a persistent sidebar entry with its own isolated browser profile. No recipe catalog, no telemetry, no account.
 
-**Status:** 0.4.1. Linux (X11/XWayland) is supported and packaged; macOS 14+ builds and runs from source (experimental; `task install:macos` builds an ad-hoc signed app, no download); Windows is not supported yet. See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
+**Status:** 0.4.2. Linux (X11/XWayland) is supported and packaged; macOS 14+ builds and runs from source (experimental; `task install:macos` builds an ad-hoc signed app, no download); Windows is not supported yet. See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
 
 ## Prerequisites
 
