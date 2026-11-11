@@ -43,7 +43,7 @@ A user may enter an **IRI** (Internationalized Resource Identifier), including U
 
 ## 4. UX / interaction contract
 
-**Window:** native title bar, left sidebar (~56–240 px adaptable), content region reserved exclusively for the native WebView, compact top toolbar *outside* its rectangle. Avoid GPUI popovers drawn over the WebView, particularly on Windows. Prefer full-width fixed GPUI top bars, native context menus, or temporarily hide/resize the WebView for dialogs.
+**Window:** native title bar, left sidebar (~56–240 px adaptable), content region reserved exclusively for the native WebView, compact top toolbar *outside* its rectangle. Avoid GPUI popovers drawn over the WebView, particularly on Windows. Prefer full-width fixed GPUI top bars, native context menus, or temporarily hide/resize the WebView for dialogs. Sidebar icon tooltips (app name and page title) stick out over the WebView, so on macOS they are native AppKit tooltips (drawn in their own window, above the WebView); Linux/Windows still use the GPUI tooltip.
 
 **Empty state:** “Add a web app” URL field with an example. Return validates, adds the app, creates its view, and navigates.
 

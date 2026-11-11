@@ -1,5 +1,5 @@
 //! macOS platform services: page notifications in Notification Center, the Dock badge,
-//! and WebKit's spell-checking switch.
+//! WebKit's spell-checking switch, and native tooltips.
 
 use std::sync::OnceLock;
 
@@ -218,6 +218,27 @@ pub fn install_page_key_monitor() {
     };
     // The monitor lives for the whole process.
     std::mem::forget(monitor);
+}
+
+/// Native tooltip for the sidebar icons. A GPUI tooltip is drawn inside GPUI's own layer,
+/// and the native web view (a subview above it) hides the part that sticks out of the
+/// narrow sidebar. AppKit draws tooltips in a separate window, above the web view.
+/// Sets (or with `None` clears) the tooltip of GPUI's content view; the mouse is over the
+/// sidebar while it is set, so the view-wide tooltip only shows there.
+pub fn set_tooltip(window: &gpui_kit::Window, text: Option<&str>) {
+    use objc2_app_kit::NSView;
+    use wry::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else {
+        return;
+    };
+    // GPUI's content view; it outlives this call (the window is borrowed).
+    let view: &NSView = unsafe { h.ns_view.cast::<NSView>().as_ref() };
+    let text = text.map(NSString::from_str);
+    view.setToolTip(text.as_deref());
 }
 
 const SPELL_KEY: &str = "WebContinuousSpellCheckingEnabled";

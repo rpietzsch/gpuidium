@@ -6,6 +6,10 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- macOS: the tooltip of a sidebar icon was hidden behind the web page. It is now a native
+  tooltip shown above the page.
+
 ## [0.4.1] - 2026-11-10
 
 macOS fix for page dialogs. No changes for Linux.
