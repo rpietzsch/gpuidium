@@ -6,6 +6,10 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-12
+
+One switch to mute all apps.
+
 ### Added
 - A bell button in the sidebar (between + and ⚙) mutes all apps at once: sounds the pages
   play themselves (chat chimes, but also calls and videos) and the notification sound.
@@ -139,7 +143,8 @@ First usable release after the 0.0.1 pre-alpha, for Linux (X11 and XWayland). Wi
 - In Flatpak, export and import use fixed files inside the app's config folder (no file
   dialog yet).
 
-[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/rpietzsch/gpuidium/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.5.0
 [0.4.2]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.2
 [0.4.1]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.1
 [0.4.0]: https://github.com/rpietzsch/gpuidium/releases/tag/v0.4.0
