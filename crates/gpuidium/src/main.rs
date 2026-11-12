@@ -22,7 +22,7 @@ use gpui_kit::component::{ActiveTheme as _, Disableable as _};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, Image, ImageFormat,
     InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, StatefulInteractiveElement,
-    Styled, Window, WindowOptions, actions, div, img, px,
+    Styled, Window, WindowOptions, actions, div, img, px, svg,
 };
 use gpuidium_core::{
     AppId, AppState, Command, Event, ProfileId, RemoveMode,
@@ -264,6 +264,7 @@ impl Shell {
             host.set_app_notifications(cx, app, false);
         }
         host.set_spellcheck(cx, settings.spellcheck, &settings.spell_languages);
+        host.set_muted(cx, !settings.sound);
 
         // macOS: a click on a system notification switches to its app and runs the page's
         // own click handler (e.g. opens the chat).
@@ -604,12 +605,13 @@ impl Shell {
                         .get(id)
                         .map(|a| a.name.clone())
                         .unwrap_or_default();
+                    let sound = self.settings.sound;
                     #[cfg(target_os = "macos")]
-                    let shown = mac::notify(id, &name, note, &title, &body);
+                    let shown = mac::notify(id, &name, note, &title, &body, sound);
                     #[cfg(not(target_os = "macos"))]
                     let shown = {
                         let _ = note;
-                        external::notify(&name, &title, &body)
+                        external::notify(&name, &title, &body, sound)
                     };
                     if !shown {
                         self.status = "Notification could not be shown".into();
@@ -989,6 +991,20 @@ impl Shell {
         cx.notify();
     }
 
+    /// One switch for all apps: off mutes every page and the notification sound
+    /// (notifications still appear).
+    fn toggle_sound(&mut self, cx: &mut Context<Self>) {
+        self.settings.sound = !self.settings.sound;
+        self.host.set_muted(cx, !self.settings.sound);
+        self.status = if self.settings.sound {
+            "Sound on".into()
+        } else {
+            "All apps muted".into()
+        };
+        self.save();
+        cx.notify();
+    }
+
     fn toggle_spellcheck(&mut self, cx: &mut Context<Self>) {
         self.settings.spellcheck = !self.settings.spellcheck;
         self.host
@@ -1241,6 +1257,7 @@ impl Shell {
             });
             icons = icons.child(icon);
         }
+        let sound = self.sound_switch(cx);
         let small = |id: &'static str, glyph: &'static str| {
             div()
                 .id(id)
@@ -1270,6 +1287,7 @@ impl Shell {
             .child(icons)
             .child(div().w(px(24.)).h(px(1.)).bg(cx.theme().border))
             .child(small("open", "+").on_click(cx.listener(|this, _, _, cx| this.open_panel(cx))))
+            .child(sound)
             .child(
                 small("manage", "⚙")
                     .on_click(cx.listener(|this, _, _, cx| this.set_panel(Panel::Manage, cx))),
@@ -1278,6 +1296,48 @@ impl Shell {
                 small("keys", "?")
                     .on_click(cx.listener(|this, _, _, cx| this.set_panel(Panel::Shortcuts, cx))),
             )
+    }
+
+    /// Sidebar bell (between + and ⚙): sound on/off for all apps at once (page audio and
+    /// notification sound).
+    fn sound_switch(&self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.settings.sound;
+        let label = if on {
+            "Sound on (click to mute all apps)"
+        } else {
+            "All apps muted (click to unmute)"
+        };
+        let button = div()
+            .id("sound")
+            .size(px(28.))
+            .flex_none()
+            .rounded_md()
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .hover(|s| s.bg(cx.theme().secondary))
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_sound(cx)))
+            .child(
+                svg()
+                    .path(if on { icon::BELL } else { icon::BELL_OFF })
+                    // Matches the `text_sm` glyphs of the +, ⚙ and ? buttons.
+                    .size(px(12.))
+                    .text_color(if on {
+                        cx.theme().foreground
+                    } else {
+                        cx.theme().muted_foreground
+                    }),
+            );
+        // macOS: a GPUI tooltip would be hidden by the web view (see `mac::set_tooltip`).
+        #[cfg(target_os = "macos")]
+        let button = button
+            .on_hover(move |hovered, window, _| mac::set_tooltip(window, hovered.then_some(label)));
+        #[cfg(not(target_os = "macos"))]
+        let button = button.tooltip(move |window, cx| {
+            gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
+        });
+        button.into_any_element()
     }
 
     /// The IRI field: visible only here. Typing also filters existing apps.
@@ -1893,7 +1953,7 @@ fn main() {
     #[cfg(not(target_os = "linux"))]
     let app = gpui_kit::application();
 
-    app.run(move |cx| {
+    app.with_assets(icon::Icons).run(move |cx| {
         gpui_kit::init(cx);
         cx.bind_keys([
             KeyBinding::new(mod_key!("l"), OpenPanel, None),

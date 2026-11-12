@@ -1,5 +1,5 @@
 //! macOS platform services: page notifications in Notification Center, the Dock badge,
-//! WebKit's spell-checking switch, and native tooltips.
+//! WebKit's spell-checking switch, page muting, and native tooltips.
 
 use std::sync::OnceLock;
 
@@ -102,8 +102,9 @@ pub fn init_notifications(clicks: Sender<NotificationClick>) {
 }
 
 /// Show one page notification. Bundled: Notification Center, grouped per app, click routed
-/// back via `init_notifications`. Unbundled (`task run`): `osascript` as a fallback (no click).
-pub fn notify(app: AppId, app_name: &str, note: u64, title: &str, body: &str) -> bool {
+/// back via `init_notifications`. Unbundled (`task run`): `osascript` as a fallback (no click,
+/// never a sound). `sound`: play the default notification sound.
+pub fn notify(app: AppId, app_name: &str, note: u64, title: &str, body: &str, sound: bool) -> bool {
     if !bundled() {
         // Text goes in as arguments, never into the script source.
         return std::process::Command::new("osascript")
@@ -129,7 +130,10 @@ pub fn notify(app: AppId, app_name: &str, note: u64, title: &str, body: &str) ->
     content.setSubtitle(&NSString::from_str(title));
     content.setBody(&NSString::from_str(body));
     content.setThreadIdentifier(&NSString::from_str(&app.to_string()));
-    content.setSound(Some(&UNNotificationSound::defaultSound()));
+    // No sound on the content means none, also for front-app banners (`willPresent`).
+    if sound {
+        content.setSound(Some(&UNNotificationSound::defaultSound()));
+    }
     let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
         &NSString::from_str(&request_id(app, note)),
         &content,
@@ -259,6 +263,21 @@ pub fn spellcheck_default() -> bool {
 pub fn toggle_spellcheck(view: &NSObject) {
     let nil: Option<&NSObject> = None;
     let _: () = unsafe { msg_send![view, toggleContinuousSpellChecking: nil] };
+}
+
+/// Mute or unmute all audio a page plays (media elements, Web Audio). WKWebView has no
+/// public API for this; `_setPageMuted:` is the SPI Safari uses (`_WKMediaAudioMuted` = 1,
+/// so microphone/camera capture is left alone). Checked at runtime: if a WebKit update
+/// drops it, pages stay audible and this logs instead of raising.
+pub fn set_page_muted(view: &NSObject, muted: bool) {
+    let sel = objc2::sel!(_setPageMuted:);
+    let responds: bool = unsafe { msg_send![view, respondsToSelector: sel] };
+    if !responds {
+        log("page mute: WKWebView has no _setPageMuted:");
+        return;
+    }
+    let state: usize = if muted { 1 } else { 0 };
+    let _: () = unsafe { msg_send![view, _setPageMuted: state] };
 }
 
 /// Open the system's spelling settings (languages macOS detects automatically).

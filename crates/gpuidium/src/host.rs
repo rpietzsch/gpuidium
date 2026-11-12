@@ -249,6 +249,8 @@ pub struct WryHost {
     /// Spell checking on/off and languages (Linux; macOS uses the system's languages).
     spell_on: bool,
     spell_langs: Vec<String>,
+    /// All pages muted (the sidebar's sound switch); applied to new views too.
+    muted: bool,
     views: HashMap<AppId, Hosted>,
     /// Last visibility we applied to each native view. `show_only` runs on every UI event,
     /// so only real changes may reach the native view (repeated show/hide/focus calls make
@@ -266,6 +268,7 @@ impl WryHost {
             notify_flags: HashMap::new(),
             spell_on: true,
             spell_langs: Vec::new(),
+            muted: false,
             views: HashMap::new(),
             applied: HashMap::new(),
             tx,
@@ -292,6 +295,14 @@ impl WryHost {
         }
         #[cfg(not(target_os = "macos"))]
         let _ = cx;
+    }
+
+    /// Mute or unmute the audio of every page, now and for views created later.
+    pub fn set_muted(&mut self, cx: &mut App, muted: bool) {
+        self.muted = muted;
+        for h in self.views.values() {
+            apply_muted(h.view.read(cx), muted);
+        }
     }
 
     /// Spell checking for all views, now and for views created later.
@@ -495,6 +506,23 @@ fn favicon_png_from_hex(res: &str) -> Option<Vec<u8>> {
     Some(png)
 }
 
+/// Engine-level mute of one page: WebKitGTK's public switch, WKWebView's page-mute SPI.
+fn apply_muted(view: &WebView, muted: bool) {
+    #[cfg(target_os = "linux")]
+    {
+        use webkit2gtk::WebViewExt as _;
+        use wry::WebViewExtUnix as _;
+        view.raw().webview().set_is_muted(muted);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use wry::WebViewExtMacOS as _;
+        crate::mac::set_page_muted(&view.raw().webview(), muted);
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let _ = (view, muted);
+}
+
 impl WebviewHost for WryHost {
     fn create(
         &mut self,
@@ -648,6 +676,9 @@ impl WebviewHost for WryHost {
                 }
                 true
             });
+        }
+        if self.muted {
+            apply_muted(&webview, true);
         }
         log(&format!("created webview for {app}"));
         let view = cx.new(|_| webview);

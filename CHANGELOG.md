@@ -6,6 +6,11 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- A bell button in the sidebar (between + and ⚙) mutes all apps at once: sounds the pages
+  play themselves (chat chimes, but also calls and videos) and the notification sound.
+  Notifications still appear while muted, just silently.
+
 ## [0.4.2] - 2026-11-11
 
 macOS fix for sidebar tooltips. No changes for Linux.

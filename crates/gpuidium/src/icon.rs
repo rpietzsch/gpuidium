@@ -7,7 +7,31 @@
 //! macOS takes the Dock / Cmd+Tab icon from the app bundle (`task package:macos`); for
 //! unbundled runs (`task run`) `set_dock_icon` sets it at runtime.
 
+use std::borrow::Cow;
 use std::sync::Arc;
+
+use gpui_kit::{AssetSource, SharedString};
+
+/// Sidebar icons for `svg().path(..)`, tinted by the theme (Lucide, ISC license).
+pub const BELL: &str = "icons/bell.svg";
+pub const BELL_OFF: &str = "icons/bell-off.svg";
+
+/// The few vector icons the shell draws itself; everything else has no assets.
+pub struct Icons;
+
+impl AssetSource for Icons {
+    fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
+        Ok(match path {
+            BELL => Some(Cow::Borrowed(include_bytes!("../assets/bell.svg"))),
+            BELL_OFF => Some(Cow::Borrowed(include_bytes!("../assets/bell-off.svg"))),
+            _ => None,
+        })
+    }
+
+    fn list(&self, _path: &str) -> anyhow::Result<Vec<SharedString>> {
+        Ok(vec![BELL.into(), BELL_OFF.into()])
+    }
+}
 
 const ICON_128: &[u8] = include_bytes!("../assets/icon-128.png");
 

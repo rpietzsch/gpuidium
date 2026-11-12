@@ -45,6 +45,9 @@ pub struct Settings {
     /// Spell-check languages (e.g. `en_US`, `de_DE`), all used at once. Empty: the system's
     /// default. Linux only; macOS detects the language among the system's spelling languages.
     pub spell_languages: Vec<String>,
+    /// Sound for all apps (on by default; the sidebar's bell button). Off mutes every page's
+    /// own audio and drops the system sound of page notifications.
+    pub sound: bool,
 }
 
 impl Default for Settings {
@@ -53,6 +56,7 @@ impl Default for Settings {
             unload_inactive_minutes: None,
             spellcheck: true,
             spell_languages: Vec::new(),
+            sound: true,
         }
     }
 }
@@ -286,6 +290,7 @@ mod tests {
         // Spell checking defaults on; notifications default on (nobody is in the off list).
         assert!(c.settings.spellcheck && c.settings.spell_languages.is_empty());
         assert!(c.notifications_off.is_empty());
+        assert!(c.settings.sound);
         // The pre-0.4 global notification switch is ignored, not an error.
         let older = br#"{"schema_version":1,"apps":[],"settings":{"notifications":false}}"#;
         assert!(super::Config::parse(older).unwrap().settings.spellcheck);
