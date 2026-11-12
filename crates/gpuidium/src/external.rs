@@ -30,31 +30,39 @@ pub fn open(url: &str) -> bool {
 /// Show a desktop notification (Linux): through GLib's notification API, which talks to the
 /// desktop's notification service and, inside Flatpak, to the notification portal. Falls back
 /// to `notify-send` (arguments passed after `--`, never through a shell). Title/body are
-/// clipped. Returns false if neither path worked.
+/// clipped. Returns false if neither path worked. Without `sound`, `notify-send` goes first,
+/// because only it can ask the server to stay quiet (`suppress-sound` hint; GNotification
+/// has no such option).
 // macOS delivers through `mac::notify` (Notification Center).
 #[cfg(not(target_os = "macos"))]
-pub fn notify(app: &str, title: &str, body: &str) -> bool {
+pub fn notify(app: &str, title: &str, body: &str, sound: bool) -> bool {
     #[cfg(target_os = "linux")]
     {
         let clip = |s: &str| s.chars().take(200).collect::<String>();
         let (title, body) = (clip(&format!("{app}: {title}")), clip(body));
-        if notify_gio(&title, &body) {
+        let notify_send = |quiet: bool| {
+            let mut cmd = Command::new("notify-send");
+            cmd.arg("--app-name=GPUIdium");
+            if quiet {
+                cmd.arg("--hint=boolean:suppress-sound:true");
+            }
+            cmd.arg("--")
+                .arg(&title)
+                .arg(&body)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .is_ok()
+        };
+        if !sound && notify_send(true) {
             return true;
         }
-        Command::new("notify-send")
-            .arg("--app-name=GPUIdium")
-            .arg("--")
-            .arg(&title)
-            .arg(&body)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .is_ok()
+        notify_gio(&title, &body) || (sound && notify_send(false))
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (app, title, body);
+        let _ = (app, title, body, sound);
         false
     }
 }
