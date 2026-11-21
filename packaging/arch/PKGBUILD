@@ -24,23 +24,22 @@ if [ -n "${GPUIDIUM_SRC:-}" ]; then
   source=("$pkgname-$pkgver.tar.gz::file://$GPUIDIUM_SRC")
 fi
 
+# No RUSTUP_TOOLCHAIN override: rust-toolchain.toml in the source picks the pinned compiler
+# (rustup users); with the pacman `rust` package it must be recent enough (see that file).
 prepare() {
   cd "$pkgname-$pkgver"
-  export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
   cd "$pkgname-$pkgver"
-  export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
-  export CARGO_TARGET_DIR=target
+  export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
   cargo build --frozen --release -p gpuidium --bin gpuidium
 }
 
 check() {
   cd "$pkgname-$pkgver"
-  export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
-  export CARGO_TARGET_DIR=target
+  export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
   # Unit tests of the GUI-free core; the browser-engine tests need a display.
   cargo test --frozen -p gpuidium-core
 }

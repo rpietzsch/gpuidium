@@ -35,6 +35,8 @@ task bench           # process-tree memory/CPU baseline (needs display + xdotool
 task package:linux   # dist/gpuidium-<ver>-linux-x86_64.tar.gz (+ .sha256)
 task package:macos   # dist/GPUIdium.app + zip (macOS, ad-hoc signed; see docs/packaging.md)
 task install:macos   # package:macos, then copy GPUIdium.app to /Applications
+task install:linux   # build + install to ~/.local (PREFIX=/usr/local for system-wide)
+task install:arch    # Arch: makepkg from git HEAD, then pacman -U
 task release:linux   # package + checksum + optional GPG signature + verification (docs/updates.md)
 ```
 

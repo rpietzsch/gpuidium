@@ -119,6 +119,18 @@ tasks:
       - echo "installed /Applications/GPUIdium.app"
     platforms: [darwin]
 
+  install:linux:
+    desc: Build and install to ~/.local (binary, desktop entry, icon); PREFIX=/usr/local for system-wide
+    cmds:
+      - scripts/install-linux.sh
+    platforms: [linux]
+
+  install:arch:
+    desc: Build an Arch package from git HEAD with packaging/arch/PKGBUILD and install it via pacman -U
+    cmds:
+      - scripts/install-arch.sh
+    platforms: [linux]
+
   release:linux:
     desc: Package, checksum and (with GPUIDIUM_SIGN_KEY set) GPG-sign the Linux tarball, then verify it
     cmds:

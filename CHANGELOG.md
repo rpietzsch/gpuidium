@@ -6,6 +6,9 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Linux: `task install:linux` (per-user or `PREFIX`) and `task install:arch` (pacman package from git HEAD).
+
 ## [0.5.0] - 2026-11-12
 
 One switch to mute all apps.
