@@ -2,7 +2,7 @@
 
 A lightweight, keyboard-friendly [GPUI](https://gpui.rs) shell for web apps. Paste a URL, get a persistent sidebar entry with its own isolated browser profile. No recipe catalog, no telemetry, no account.
 
-**Status:** 0.5.0. Linux (X11/XWayland) is supported and packaged; macOS 14+ builds and runs from source (experimental; `task install:macos` builds an ad-hoc signed app, no download); Windows is not supported yet. See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
+**Status:** 0.5.0. Linux (X11/XWayland) is supported and packaged; macOS 14+ builds and runs from source (experimental; `task install:macos` builds an ad-hoc signed app, no download); Windows 11 builds and runs from source (experimental, WebView2; `task install:win`, no installer yet, see [`docs/verification-windows.md`](docs/verification-windows.md)). See [`tasks/spec.md`](tasks/spec.md) and [`tasks/backlog.md`](tasks/backlog.md).
 
 ## Prerequisites
 
@@ -37,6 +37,7 @@ task package:macos   # dist/GPUIdium.app + zip (macOS, ad-hoc signed; see docs/p
 task install:macos   # package:macos, then copy GPUIdium.app to /Applications
 task install:linux   # build + install to ~/.local (PREFIX=/usr/local for system-wide)
 task install:arch    # Arch: makepkg from git HEAD, then pacman -U
+task install:win     # Windows: build + per-user install, Start menu, Settings > Apps uninstall
 task release:linux   # package + checksum + optional GPG signature + verification (docs/updates.md)
 ```
 

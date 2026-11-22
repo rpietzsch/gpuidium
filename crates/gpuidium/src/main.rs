@@ -5,11 +5,17 @@
 //! disappears once an address is entered. Panels temporarily replace the native view
 //! (it is hidden, never overlaid), see spec section 4.
 
+// Windows release builds: no console window next to the app (`GPUIDIUM_LOG` still reaches
+// a terminal it was started from, see `win::init_process`).
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod external;
 mod host;
 mod icon;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(target_os = "windows")]
+mod win;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
@@ -266,12 +272,18 @@ impl Shell {
         host.set_spellcheck(cx, settings.spellcheck, &settings.spell_languages);
         host.set_muted(cx, !settings.sound);
 
-        // macOS: a click on a system notification switches to its app and runs the page's
-        // own click handler (e.g. opens the chat).
-        #[cfg(target_os = "macos")]
+        #[cfg(target_os = "windows")]
+        win::set_main_window(window);
+
+        // macOS/Windows: a click on a system notification switches to its app and runs the
+        // page's own click handler (e.g. opens the chat).
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
             let (tx, clicks) = async_channel::unbounded();
+            #[cfg(target_os = "macos")]
             mac::init_notifications(tx);
+            #[cfg(target_os = "windows")]
+            win::init_notifications(tx);
             cx.spawn_in(window, async move |this, cx| {
                 while let Ok((app, note)) = clicks.recv().await {
                     let r = this.update_in(cx, |this, window, cx| {
@@ -608,7 +620,9 @@ impl Shell {
                     let sound = self.settings.sound;
                     #[cfg(target_os = "macos")]
                     let shown = mac::notify(id, &name, note, &title, &body, sound);
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(target_os = "windows")]
+                    let shown = win::notify(id, &name, note, &title, &body, sound);
+                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                     let shown = {
                         let _ = note;
                         external::notify(&name, &title, &body, sound)
@@ -1039,19 +1053,22 @@ impl Shell {
         badge::combine(title, self.unseen.contains(&id))
     }
 
-    /// macOS: total unread on the Dock icon. Only changes reach AppKit.
+    /// macOS: total unread on the Dock icon; Windows: a dot on the taskbar button. Only
+    /// changes reach the OS.
     fn update_dock_badge(&mut self) {
         let label = badge::total_label(self.state.apps().iter().map(|a| self.badge_for(a.id)));
         if label != self.dock_label {
             #[cfg(target_os = "macos")]
             mac::set_dock_badge(label.as_deref());
+            #[cfg(target_os = "windows")]
+            win::set_taskbar_badge(label.as_deref());
             self.dock_label = label;
         }
     }
 
     /// A click on a system notification: bring the window forward, show the app, and let
     /// the page handle the click.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn open_from_notification(
         &mut self,
         app: AppId,
@@ -1094,6 +1111,13 @@ impl Shell {
                         .into(),
                 ))
                 .into_any_element();
+        }
+        if cfg!(target_os = "windows") {
+            return note(
+                "Windows: WebView2 checks spelling in the languages set in Windows (Settings › Time & language › Language); this switch has no effect there yet."
+                    .into(),
+            )
+            .into_any_element();
         }
         if self.spell_dicts.is_empty() {
             return note(
@@ -1246,12 +1270,16 @@ impl Shell {
                 }))
                 .child(face)
                 .children(badge);
-            // macOS: a GPUI tooltip would be hidden by the web view (see `mac::set_tooltip`).
+            // macOS/Windows: a GPUI tooltip would be hidden by the web view (see
+            // `mac::set_tooltip`, `win::set_tooltip`).
             #[cfg(target_os = "macos")]
             let icon = icon.on_hover(move |hovered, window, _| {
                 mac::set_tooltip(window, hovered.then_some(label.as_str()))
             });
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "windows")]
+            let icon = icon
+                .on_hover(move |hovered, _, _| win::set_tooltip(hovered.then_some(label.as_str())));
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             let icon = icon.tooltip(move |window, cx| {
                 gpui_kit::component::tooltip::Tooltip::new(label.clone()).build(window, cx)
             });
@@ -1329,11 +1357,15 @@ impl Shell {
                         cx.theme().muted_foreground
                     }),
             );
-        // macOS: a GPUI tooltip would be hidden by the web view (see `mac::set_tooltip`).
+        // macOS/Windows: a GPUI tooltip would be hidden by the web view (see
+        // `mac::set_tooltip`, `win::set_tooltip`).
         #[cfg(target_os = "macos")]
         let button = button
             .on_hover(move |hovered, window, _| mac::set_tooltip(window, hovered.then_some(label)));
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        let button =
+            button.on_hover(move |hovered, _, _| win::set_tooltip(hovered.then_some(label)));
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let button = button.tooltip(move |window, cx| {
             gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
         });
@@ -1897,6 +1929,8 @@ impl Render for Shell {
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
+    win::init_process();
     gpuidium_core::diagnostics::init_clock();
     let (Some(config_dir), Some(data_dir)) = (paths::config_dir(), paths::data_dir()) else {
         eprintln!("cannot determine per-user config/data directories");

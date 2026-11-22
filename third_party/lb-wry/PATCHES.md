@@ -16,3 +16,10 @@
    UI delegate implements `runJavaScriptAlertPanel…`, `…ConfirmPanel…` and `…TextInputPanel…` with a modal
    `NSAlert` titled "<host> says". Without them WKWebView silently dropped `alert()`, `confirm()` returned false and
    `prompt()` null. Intended for upstream submission.
+8. Windows (`src/webview2/mod.rs`): `wait_with_pump_isolated` replaces `webview2_com::wait_with_pump` (and
+   `wait_for_async_operation`, which uses it) while waiting for the WebView2 environment, controller, init
+   scripts and cookies. The original pump dispatches every message; GPUI creates web views inside its own event
+   handling with its app state borrowed, so a queued GPUI task (e.g. the text cursor blink of the Open panel)
+   ran re-entrantly, failed to borrow the app and aborted the process (crash when adding an app). The new pump
+   dispatches only posted messages for windows that are not GPUI's (`Zed::*` classes), leaves input and paint
+   queued and re-posts GPUI's posted messages in order afterwards.

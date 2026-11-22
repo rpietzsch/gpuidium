@@ -3021,6 +3021,8 @@ dependencies = [
  "thiserror 2.0.21",
  "url",
  "webkit2gtk",
+ "webview2-com",
+ "windows 0.61.3",
 ]
 
 [[package]]

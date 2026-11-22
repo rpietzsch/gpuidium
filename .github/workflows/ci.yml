@@ -31,6 +31,24 @@ jobs:
       - run: xvfb-run -a task test:isolation
       - run: xvfb-run -a task test:oidc
 
+  check-windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: "1.99.1", components: "rustfmt,clippy" }
+      - uses: arduino/setup-task@v2
+        with: { version: 3.x, repo-token: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: Swatinem/rust-cache@v2
+      - run: task check
+      # WebView2 runtime is preinstalled on hosted runners. These pass on a Windows 11
+      # desktop (docs/verification-windows.md) but are not yet proven on hosted runners,
+      # so they report without failing the job until they have.
+      - run: task test:isolation
+        continue-on-error: true
+      - run: task test:oidc
+        continue-on-error: true
+
   metadata:
     runs-on: ubuntu-24.04
     steps:

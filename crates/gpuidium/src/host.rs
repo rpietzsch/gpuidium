@@ -24,8 +24,9 @@ use crate::external;
 
 /// App-level shortcuts. WebKit owns keyboard focus while a page is shown, so GPUI's
 /// key bindings never see these; the host intercepts them natively and forwards them.
-// Only the Linux backend emits shortcuts so far (macOS/Windows interception: backlog).
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+// Linux (WebKitGTK key signal) and Windows (WebView2 accelerator keys) emit shortcuts;
+// macOS uses menu key equivalents instead.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shortcut {
     Open,
@@ -114,8 +115,8 @@ fn activate_page(view: &wry::WebView) {
     let _ = view.focus();
 }
 
-// Shortcut/LoadFailed come from WebKitGTK signals only; Favicon and Notify also from macOS.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+// Shortcut/LoadFailed come from WebKitGTK signals and WebView2 events, not from macOS.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 #[derive(Debug, Clone)]
 pub enum HostEvent {
     Shortcut(Shortcut),
@@ -126,7 +127,7 @@ pub enum HostEvent {
     /// The engine reported a load failure (URL redacted, short reason).
     LoadFailed(AppId, String, String),
     /// A page showed a notification and the app's notifications are on: app, the page's
-    /// notification id (macOS, for click routing; 0 on Linux), title, body.
+    /// notification id (macOS/Windows, for click routing; 0 on Linux), title, body.
     Notify(AppId, u64, String, String),
     Title(AppId, String),
     /// A navigation was refused by policy (URL already redacted).
@@ -184,8 +185,17 @@ pub fn bind_profile_store(builder: WebViewBuilder<'_>, profile: ProfileId) -> We
 
 /// Delete one profile's browsing data: its directory, and on macOS also its
 /// `WKWebsiteDataStore` (asynchronous, best effort; failures are logged).
-/// The caller must have closed the profile's WebView first.
+/// The caller must have closed the profile's WebView first. Windows: the profile's WebView2
+/// browser process keeps its files open for a moment after the view closes, so a failed
+/// attempt is retried for up to 2 s.
 pub fn delete_profile(data_dir: &std::path::Path, profile: ProfileId) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    for _ in 0..8 {
+        if profiles::delete(data_dir, profile).is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
     #[cfg(target_os = "macos")]
     {
         use wry::WebViewExtDarwin as _;
@@ -407,6 +417,14 @@ impl WryHost {
     }
 }
 
+#[cfg(target_os = "windows")]
+impl WryHost {
+    /// The user clicked a toast: fire the page's own click handler.
+    pub fn click_notification(&self, _cx: &App, _app: AppId, note: u64) {
+        crate::win::click_notification(note);
+    }
+}
+
 #[cfg(target_os = "macos")]
 impl WryHost {
     /// Collect queued page notifications (`js/notify_shim.js`) from every view whose app
@@ -506,7 +524,8 @@ fn favicon_png_from_hex(res: &str) -> Option<Vec<u8>> {
     Some(png)
 }
 
-/// Engine-level mute of one page: WebKitGTK's public switch, WKWebView's page-mute SPI.
+/// Engine-level mute of one page: WebKitGTK's public switch, WKWebView's page-mute SPI,
+/// WebView2's `IsMuted`.
 fn apply_muted(view: &WebView, muted: bool) {
     #[cfg(target_os = "linux")]
     {
@@ -519,7 +538,9 @@ fn apply_muted(view: &WebView, muted: bool) {
         use wry::WebViewExtMacOS as _;
         crate::mac::set_page_muted(&view.raw().webview(), muted);
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "windows")]
+    crate::win::set_muted(view.raw(), muted);
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     let _ = (view, muted);
 }
 
@@ -676,6 +697,11 @@ impl WebviewHost for WryHost {
                 }
                 true
             });
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let flag = self.notify_flag(app);
+            crate::win::install(webview.raw(), app, &self.tx, flag);
         }
         if self.muted {
             apply_muted(&webview, true);

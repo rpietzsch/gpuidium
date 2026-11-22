@@ -22,7 +22,8 @@ Each app has its own WebKitGTK data store: cookies, localStorage, IndexedDB, HTT
 ## Platform
 - Linux X11 and XWayland only. Native Wayland is not supported. Requires GTK 3 and WebKitGTK 4.1.
 - No load-progress UI beyond "(loading…)" and an error line when the engine reports a failed load.
-- Windows and macOS are not verified (see ADR-001).
+- Windows 11 (WebView2) runs from source, experimental (`docs/verification-windows.md`): GPUI's DirectComposition is turned off so the page is not hidden behind GPUI; the spell-check switch has no effect (WebView2 checks with the Windows languages); the taskbar shows a dot for unread messages, not the count; no installer, WebView2 runtime check or code signing yet. Profile data lives under `%LOCALAPPDATA%\GPUIdium\profiles\<profile_id>\`, config under `%APPDATA%\GPUIdium\`.
+- macOS is experimental (see ADR-001).
 
 ## Deleting data
 After "Delete data" the profile directory is removed immediately and again after 2 s and 6 s, because WebKit's helper processes may recreate stub files. Quit within those seconds and a stub may remain; it is listed under "Saved data of removed apps" and can be deleted there.

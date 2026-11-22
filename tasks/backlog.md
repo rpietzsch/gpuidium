@@ -9,11 +9,11 @@
 ## Legend
 
 ✅ done (on Linux unless the note says otherwise) · 🟡 partly done, or built but not yet verified in the running app · ⛔ blocked (needs macOS/Windows hardware) · ⬜ not started.
-Windows and macOS are not verified anywhere, so no ticket is "done" for those platforms.
+macOS and Windows are only partly verified (see the Progress notes and `docs/verification-windows.md`), so no ticket is "done" for those platforms unless its note says so.
 
 ## Status summary (2026-11-07)
 
-**M0 (G1 gate): Linux half complete, gate NOT passed.** Remaining items all need hardware or a decision: SPIKE-002 (macOS) and SPIKE-003 (Windows) need real machines; SPIKE-004 still needs pure X11, DPI, focus/resize stress; SPIKE-005 needs macOS/Windows; SPIKE-006/007 stay open until those report (ADR-001 is PROVISIONAL).
+**M0 (G1 gate): Linux half complete, gate NOT passed.** Remaining items all need hardware or a decision: SPIKE-002 (macOS) needs a real machine; SPIKE-003 (Windows) is partly done on Windows 11 x64 (2026-11-22: render, switch, shortcuts, z-order via native tooltip; DPI/multi-monitor/resize stress open); SPIKE-004 still needs pure X11, DPI, focus/resize stress; SPIKE-005 needs macOS x64; SPIKE-006/007 stay open until those report (ADR-001 is PROVISIONAL).
 **M1: implemented and verified on Linux, with these gaps:**
 - Linux gaps closed on 2026-11-07: CORE-006, PROFILE-004, PROFILE-002 (see Progress).
 - UI-003: screen-reader labels and focus-return unverified.
@@ -25,18 +25,19 @@ Windows and macOS are not verified anywhere, so no ticket is "done" for those pl
 | Item | Status | Evidence |
 |---|---|---|
 | SPIKE-001 | **Done** | Pins in `Cargo.toml`/`rust-toolchain.toml`, `Cargo.lock`; ADR-001 version table |
-| BUILD-001 | **Done** (Linux verified; macOS: `task build`/`check` clean, 2026-11-08; Windows untested) | `Taskfile.yml`, README |
+| BUILD-001 | **Done** (Linux verified; macOS: `task build`/`check` clean, 2026-11-08; Windows 11: `task build`/`check`/`test:isolation`/`test:oidc` clean, 2026-11-22; CI job `check-windows` added, not yet run on GitHub) | `Taskfile.yml`, README, `ci.yml` |
 | SPIKE-004 | **Partial** - Xwayland session verified; pure X11, DPI, focus/resize/100-switch not yet | ADR-001 |
-| SPIKE-005 | **Partial** - Linux PASS; **macOS PASS** (2026-11-08, macOS 26.7.1 arm64; one `WKWebsiteDataStore` per profile UUID, min. macOS 14; before the fix all profiles shared one store); macOS x64 and Windows missing | `spike_isolation`, `spike_oidc`, ADR-001 |
-| SPIKE-002, SPIKE-003 | **Blocked** - need macOS / Windows machines | - |
+| SPIKE-005 | **Partial** - Linux PASS; **macOS PASS** (2026-11-08, macOS 26.7.1 arm64; one `WKWebsiteDataStore` per profile UUID, min. macOS 14; before the fix all profiles shared one store); **Windows 11 x64 PASS** (2026-11-22, WebView2 157; one user-data folder per profile, several environments in one process); macOS x64 missing | `spike_isolation`, `spike_oidc`, ADR-001, `docs/verification-windows.md` |
+| SPIKE-002 | **Blocked** - needs a macOS machine | - |
+| SPIKE-003 | **Partial** (2026-11-22) - child WebView2 was invisible behind GPUI's DirectComposition swap chain; the app now turns it off at startup and the page renders; switching, Ctrl/Alt shortcuts from inside the page, Open panel/Esc, native sidebar tooltip above the page verified. Crash when adding an app (re-entrant GPUI task during WebView2 creation) fixed by `lb-wry` patch 8 and verified. Open: DPI scaling, multiple monitors, resize/100-switch stress | `win.rs`, `docs/verification-windows.md` |
 | SPIKE-006, SPIKE-007 | **Open** - ADR-001 is PROVISIONAL | ADR-001 |
 | CORE-001, CORE-002, CORE-003 | **Done** (unit tests; fuzz-style URL sweep) | `crates/gpuidium-core` |
 | CORE-004 | **Done** - `WebviewHost` trait + Wry adapter; native types never reach the domain model | `crates/gpuidium/src/host.rs` |
-| CORE-005 | **Done on Linux** - lazy create, hide-all-then-show-one, 102 keyboard switches without crash; Win/macOS unverified | manual smoke, 2026-11-07 |
+| CORE-005 | **Done on Linux** - lazy create, hide-all-then-show-one, 102 keyboard switches without crash; Windows: create/switch/show/hide verified (2026-11-22), switch stress not yet; macOS unverified | manual smoke, 2026-11-07 |
 | CORE-006 | **Partial** - back/forward/reload/home/origin/loading shown; **no load-failure state yet** (Wry has no failure callback; needs a workaround) | `main.rs` |
 | CORE-007 | **Done** - policy in core (tests), enforced via Wry navigation + new-window handlers, no IPC handler registered | `policy.rs`, `host.rs` |
 | PROFILE-001 | **Done on Linux** - one `WebContext` + data dir per `ProfileId`, never shared | `host.rs`, `profiles.rs` |
-| PROFILE-002 | **Partial** - automated same-origin test passes on Linux and macOS arm64 (`task test:isolation`); Linux in CI, macOS not; Windows missing | ADR-001 |
+| PROFILE-002 | **Partial** - automated same-origin test passes on Linux, macOS arm64 and Windows 11 x64 (`task test:isolation`); Linux in CI; Windows CI step added (non-blocking until proven on hosted runners); macOS not in CI | ADR-001 |
 | PROFILE-003 | **Done on Linux** - default keep-data, explicit delete scoped to one profile (symlink-safe, tested); orphan listing exists, no purge UI yet | `profiles.rs`, `main.rs` |
 | UI-001 | **Done on Linux** - sidebar, selection, empty state, no overlays above the native pane | screenshots |
 | UI-002 | **Done on Linux** - add (URL diagnostics), inline Edit (name + start URL, re-validated by core, navigates on change, profile unchanged) and remove (keep/delete confirmation). Manual Windows z-order check pending | `main.rs` (`begin_edit`/`save_edit`) |
@@ -44,7 +45,7 @@ Windows and macOS are not verified anywhere, so no ticket is "done" for those pl
 | UI-004 | **Done** - monogram avatar, move up/down | `main.rs` |
 | CORE-008 | **Done on Linux** - list/order/active/profile mapping restored after restart | manual test |
 | CORE-009 | **Done** - single-instance lock, opt-in `GPUIDIUM_LOG` with URL redaction, config-corruption notice | `instance.rs`, `diagnostics.rs` |
-| PROFILE-004 (P0) | **Done on Linux** - `lb-wry` vendored+patched: cache, DOM cache, HSTS, ITP under the profile dir; `task test:isolation` asserts nothing lands in shared dirs. macOS/Windows equivalents unverified | `third_party/lb-wry/PATCHES.md` |
+| PROFILE-004 (P0) | **Done on Linux** - `lb-wry` vendored+patched: cache, DOM cache, HSTS, ITP under the profile dir; `task test:isolation` asserts nothing lands in shared dirs. Windows: WebView2 keeps cache, HSTS etc. inside the profile's user-data folder; the task asserts no shared `<exe>.WebView2` folder (2026-11-22). macOS equivalent unverified | `third_party/lb-wry/PATCHES.md` |
 | CORE-006 | **Done on Linux** - WebKit `load-failed` -> error line in toolbar, retry via reload (cancelled/policy-blocked loads ignored). Not yet exercised by hand | `host.rs`, `main.rs` |
 | PROFILE-002 | **Done on Linux** - `task test:isolation` (CI under xvfb) | `Taskfile.yml`, `ci.yml` |
 | OIDC login (new) | **Done on Linux** - mock IdP/RP redirect flow works; persistent-cookie login survives restart; second profile isolated; **session cookies without Max-Age are lost on restart** (documented limit); popup logins unsupported | `spike_oidc`, `docs/known-limits.md` |
@@ -81,7 +82,7 @@ Windows and macOS are not verified anywhere, so no ticket is "done" for those pl
 | macOS navigation keys (2026-11-08) | **Done (verified, macOS 26.7.1 arm64)** - Up/Down did nothing in Mattermost's Cmd+K and unhandled keys inserted "no glyph" boxes. Key monitor in `mac.rs`. Probe page in a sandboxed HOME: Up/Down/Shift+Up/Option+Up reach `keydown` (preventDefault respected), Left/Home/End/Shift+Right/Forward Delete edit correctly, F1/Page Down delivered, no inserted characters; with the Open panel up arrows stay in GPUIdium. Follow-up: repeated presses fell back to the old behaviour because AppKit reuses `NSEvent` objects and the resend check compared objects; now (timestamp, key code). Fast bursts of 4x Down/End/Home/Up verified with and without page `preventDefault`. Not checked against a real Mattermost server by the agent | `mac.rs` |
 | macOS JS dialogs (2026-11-10) | **Done (verified, macOS 26.7.1 arm64), Linux unchanged** - `alert()` showed nothing, `confirm()` returned false, `prompt()` null (WKWebView UI delegate lacked the dialog methods); now native `NSAlert` titled "<host> says" (`lb-wry` patch #7). Probe page in a sandboxed HOME, driven via System Events: alert blocks until OK, confirm OK/Cancel -> true/false, prompt shows the default text and returns the typed text / null on Cancel. Not checked: dialogs from a background (hidden) app, dialog spam suppression (none yet) | `wry_web_view_ui_delegate.rs` |
 | macOS host gaps (new) | **Open** - no native shortcut interception while a page has focus (Cmd+L etc. only work when GPUI has focus), no load-failure page. Running the real app on macOS not yet tried | `host.rs` |
-| Windows/macOS rows | Still blocked on hardware (SPIKE-002/003, PKG-001/002, QA-002 for those OSes) | - |
+| Windows/macOS rows | macOS still blocked on hardware (SPIKE-002, PKG-002, QA-002). Windows 11 hardware available since 2026-11-22: WebView2 backend (`win.rs`) done, see WIN-001..004 for what is left | `docs/verification-windows.md` |
 
 ## Definition of done (all tickets)
 
@@ -99,7 +100,7 @@ Windows and macOS are not verified anywhere, so no ticket is "done" for those pl
 |---|---|---|---|---|---|---|
 | ✅ | SPIKE-001 | M | Create Rust workspace; pin compatible GPUI/GPUI Kit/gpui-webview/Wry versions | Clean builds, version lock, linked upstream example, licenses documented | — | pinned, builds |
 | ⛔ | SPIKE-002 | L | macOS WKWebView child smoke | Page loads, focus, resize, URL/navigation, reload, switching 2 webviews, state across restart; test arm64 and x64 | 001 | needs a Mac (arm64+x64) |
-| ⛔ | SPIKE-003 | L | Windows 11 WebView2 child smoke | Same as 002; explicit test of DirectComposition workaround and z-order, toolbar unobstructed | 001 | needs Windows 11 |
+| 🟡 | SPIKE-003 | L | Windows 11 WebView2 child smoke | Same as 002; explicit test of DirectComposition workaround and z-order, toolbar unobstructed | 001 | DirectComposition off is required (else page invisible); render/switch/shortcuts/z-order OK; DPI, multi-monitor, resize stress open |
 | 🟡 | SPIKE-004 | L | Linux X11 / XWayland WebKitGTK child smoke | Same as 002 on native X11 and Wayland session via XWayland; required GTK/WebKit packages documented; DPI tested | 001 | Xwayland verified; pure X11 + DPI + stress still open |
 | 🟡 | SPIKE-005 | XL | **Prove persistent per-app-instance profile isolation** | On each OS, create two same-origin apps with distinct `profile_id`s; verify distinct cookies/localStorage, feasible IndexedDB/service-worker partitioning, both accounts persist after restart; document underlying WebView store APIs and minimum supported OS versions | 002,003,004 | Linux PASS; macOS arm64 PASS (min. macOS 14); macOS x64/Windows missing |
 | ⬜ | SPIKE-006 | M | Document GPUI WebView composition constraints | Reproduce menu/dialog behavior, fullscreen, resizes, focus, popup opening on 3 OSes | 002,003,004 | composition notes only for Linux so far |
@@ -141,10 +142,14 @@ Windows and macOS are not verified anywhere, so no ticket is "done" for those pl
 | Status | ID | Priority | Size | Ticket | Acceptance / proof | Dependencies | Notes |
 |---|---|---|---|---|---|---|---|
 | 🟡 | QA-001 | P0 | L | Automated parser/state/persistence tests | CI runs `task check` (Rust unit tests, clippy, formatting) on supported hosts | Milestone 1 | CI workflow written, not yet run on GitHub |
-| 🟡 | QA-002 | P0 | L | OS-specific manual and scripted smoke suite | Recorded pass/fail for Win11, macOS arm64+x64, Linux X11 and XWayland | Milestone 1 | Linux manual runs only; no recorded suite; no Win/macOS |
+| 🟡 | QA-002 | P0 | L | OS-specific manual and scripted smoke suite | Recorded pass/fail for Win11, macOS arm64+x64, Linux X11 and XWayland | Milestone 1 | Linux manual runs; Windows 11 recorded in `docs/verification-windows.md` (2026-11-22); no scripted suite; no macOS |
 | 🟡 | QA-003 | P0 | M | OAuth/auth and popup compatibility matrix | Test representative web services in separate profiles, including same-site dual accounts; document blockers and external-browser fallback; no deceptive universal claim | CORE-007,PROFILE-002 | mock OIDC flow tested; real services not |
 | ✅ | QA-004 | P0 | M | Security review | No executable schemes, uncontrolled native IPC, secrets in logs or cross-profile data bleed; external links and delete-data handled safely | CORE-007,PROFILE-003 | Linux self-review |
-| ⛔ | PKG-001 | P0 | L | Windows installer and runtime handling | Install/uninstall, WebView2 preflight, fresh-user smoke, packaged executable signed if release policy requires | QA-002 | needs Windows |
+| 🟡 | PKG-001 | P0 | L | Windows installer and runtime handling | Install/uninstall, WebView2 preflight, fresh-user smoke, packaged executable signed if release policy requires | QA-002 | `task install:win` (per-user copy + Start menu + Settings > Apps uninstall, 2026-11-22) is a dev install; owner ran it without errors. `.exe` embeds the icon, GUI subsystem. Missing: real installer (MSIX/MSI), WebView2 runtime preflight, signing, fresh-user test |
+| 🟡 | WIN-001 | P1 | S | Windows: verify the remaining WebView2 hooks in the running app | Toast click selects the app and fires the page's `onclick`; mute switch silences page audio; taskbar dot appears/clears; "Delete data" removes the profile folder | SPIKE-003 | implemented in `win.rs` (2026-11-22), not yet observed |
+| ⬜ | WIN-002 | P1 | M | Windows: spell-check switch | Switch turns WebView2 spell checking on/off, or the UI hides it on Windows | SPIKE-003 | WebView2 has no spell-check API; Manage page explains it uses the Windows languages |
+| ⬜ | WIN-003 | P1 | M | Windows: DPI, multiple monitors, resize/switch stress | Page bounds correct at 100/150/200 % and when moving between monitors; 100 switches without blank page | SPIKE-003 | part of SPIKE-003 |
+| ⬜ | WIN-004 | P2 | S | Windows: unread count on the taskbar | Overlay shows the number, not only a dot | WIN-001 | dot only for now |
 | 🟡 | PKG-002 | P0 | L | macOS app bundle and distribution | Universal binary or separate arm64/x64 artifacts; launch, signing/notarization plan, clean install | QA-002 | `task package:macos`: `.app` + zip, ad-hoc signed, icon; launches with bundle id (verified 2026-11-08). Universal arm64+x86_64 build (`GPUIDIUM_UNIVERSAL=1`, `lipo` verified locally), local only; `task install:macos` copies to `/Applications`. A macOS CI job and release zip were tried and removed (owner decision 2026-11-08: not notarized, runner minutes). Missing: Developer ID + notarization (then CI/release), running on Intel hardware, clean-install test |
 | 🟡 | PKG-003 | P0 | L | Linux deb/rpm/AppImage choice | At least one working distributable; WebKitGTK/GTK dependency and XWayland docs; fresh-user test | QA-002 | tarball only; no deb/rpm/AppImage. `task install:linux` / `task install:arch` added |
 | ✅ | DOC-001 | P0 | M | README, quickstart, limits, privacy page | Platform prerequisites, no recipe catalog, per-app isolation guarantees and limits, XWayland constraint, known incompatible services | QA-003 | Linux |

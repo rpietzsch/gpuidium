@@ -1,6 +1,6 @@
 # ADR-001: GPUI-only GO / NO-GO
 
-**Status:** PROVISIONAL - Linux X11/XWayland evidence only. Windows 11 and macOS are **unverified**; G1 is **not** passed until SPIKE-002 and SPIKE-003 report.
+**Status:** PROVISIONAL - Linux X11/XWayland evidence, plus Windows 11 x64 (2026-11-22, partial SPIKE-003, SPIKE-005 PASS). macOS is **unverified** here; G1 is **not** passed until SPIKE-002 and the rest of SPIKE-003 report.
 **Date:** 2026-11-07
 
 ## Pinned stack (SPIKE-001)
@@ -40,10 +40,11 @@ Not yet covered on Linux: pure X11 session, service workers, DPI scaling, focus/
 |---|---|---|
 | Linux | `WebContext::new(Some(dir))` per profile (WebKitGTK `WebsiteDataManager`) | **Verified.** See findings 1-2. |
 | macOS | `WebViewBuilderExtDarwin::with_data_store_identifier([u8;16])` (WKWebsiteDataStore); `ProfileId` is a UUID so its 16 bytes map directly. `data_directory` is **not** available on WKWebView | **Unverified.** Requires **macOS 14+**; baseline is therefore macOS 14 unless a fallback is found. |
-| Windows | `WebContext::new(Some(dir))` = separate WebView2 user data folder | **Unverified.** WebView2 environments with different user-data folders must be created per profile; test concurrently in one process. |
+| Windows | `WebContext::new(Some(dir))` = separate WebView2 user data folder | **Verified** (2026-11-22, Windows 11 x64, WebView2 157): one environment per profile, several concurrently in one process; `spike_isolation` and `spike_oidc` PASS. GPUI's DirectComposition must be off (`GPUI_DISABLE_DIRECT_COMPOSITION`, set by the app) or the WebView2 child window is covered. See `docs/verification-windows.md`. |
 
 ## Decision
 
 - **Linux: GO** for continuing with GPUI + gpui-webview, pending PROFILE-004.
-- **macOS, Windows: HOLD** until SPIKE-002/003/005 produce evidence on real hardware. No Tauri fallback; on failure pursue a GPUI-compatible adapter or upstream fixes and hold that platform's release.
+- **Windows (2026-11-22): GO for development** on Windows 11 x64: SPIKE-005 passes, the child WebView2 renders, switches and takes shortcuts once DirectComposition is off. Release stays on HOLD for the rest of SPIKE-003 (DPI, multi-monitor, resize stress) and PKG-001.
+- **macOS: HOLD** until SPIKE-002/005 produce evidence on real hardware. No Tauri fallback; on failure pursue a GPUI-compatible adapter or upstream fixes and hold that platform's release.
 - Milestone 1 work proceeds against the `WebviewHost` abstraction so platform gaps stay contained.

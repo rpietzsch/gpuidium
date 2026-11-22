@@ -8,6 +8,18 @@ All notable changes to GPUIdium are documented here. The format follows
 
 ### Added
 - Linux: `task install:linux` (per-user or `PREFIX`) and `task install:arch` (pacman package from git HEAD).
+- Windows 11 (experimental, WebView2): pages now show (GPUI's DirectComposition is turned off,
+  it hid the page); app shortcuts work while a page has focus; camera, location and other
+  permissions are denied, notifications follow the per-app switch and appear as Windows toasts;
+  favicons, load-error state, mute switch, sidebar tooltips above the page, unread dot on the
+  taskbar button, app icon in the `.exe`, no console window. Profile isolation and the mock
+  login tests pass (`task test:isolation`, `task test:oidc`). CI runs `task check` on Windows.
+- Windows: `task install:win` builds and installs per user to `%LOCALAPPDATA%\Programs\GPUIdium`
+  with a Start menu shortcut and an uninstall entry in Settings > Apps.
+
+### Fixed
+- Windows: adding an app from the Open panel crashed GPUIdium. Creating the page no longer runs
+  GPUIdium's own queued work in the middle of handling the key press (`lb-wry` patch 8).
 
 ## [0.5.0] - 2026-11-12
 

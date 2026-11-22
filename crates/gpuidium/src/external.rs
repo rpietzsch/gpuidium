@@ -33,8 +33,9 @@ pub fn open(url: &str) -> bool {
 /// clipped. Returns false if neither path worked. Without `sound`, `notify-send` goes first,
 /// because only it can ask the server to stay quiet (`suppress-sound` hint; GNotification
 /// has no such option).
-// macOS delivers through `mac::notify` (Notification Center).
-#[cfg(not(target_os = "macos"))]
+// macOS delivers through `mac::notify` (Notification Center), Windows through `win::notify`
+// (toasts).
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn notify(app: &str, title: &str, body: &str, sound: bool) -> bool {
     #[cfg(target_os = "linux")]
     {

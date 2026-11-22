@@ -457,7 +457,7 @@ impl InnerWebView {
       )?;
     }
 
-    webview2_com::wait_with_pump(rx)?.map_err(Into::into)
+    wait_with_pump_isolated(rx)?.map_err(Into::into)
   }
 
   #[inline]
@@ -592,7 +592,7 @@ impl InnerWebView {
       }
     }
 
-    webview2_com::wait_with_pump(rx)?.map_err(Into::into)
+    wait_with_pump_isolated(rx)?.map_err(Into::into)
   }
 
   #[inline]
@@ -1525,17 +1525,18 @@ impl InnerWebView {
 
   #[inline]
   fn add_script_to_execute_on_document_created(webview: &ICoreWebView2, js: String) -> Result<()> {
-    let webview = webview.clone();
-    AddScriptToExecuteOnDocumentCreatedCompletedHandler::wait_for_async_operation(
-      Box::new(move |handler| unsafe {
-        let js = HSTRING::from(js);
-        webview
-          .AddScriptToExecuteOnDocumentCreated(&js, &handler)
-          .map_err(Into::into)
-      }),
-      Box::new(|e, _| e),
-    )
-    .map_err(Into::into)
+    // Not `wait_for_async_operation`: it waits with `webview2_com::wait_with_pump` (patch 8).
+    let (tx, rx) = mpsc::channel();
+    let handler = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(
+      move |e, _| {
+        let _ = tx.send(e);
+        Ok(())
+      },
+    ));
+    unsafe {
+      webview.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(js), &handler)?;
+    }
+    wait_with_pump_isolated(rx)?.map_err(Into::into)
   }
 
   #[inline]
@@ -1883,7 +1884,7 @@ impl InnerWebView {
       )?;
     }
 
-    webview2_com::wait_with_pump(rx).map_err(Into::into)
+    wait_with_pump_isolated(rx).map_err(Into::into)
   }
 
   pub fn set_cookie(&self, cookie: &cookie::Cookie<'_>) -> Result<()> {
@@ -2063,6 +2064,81 @@ unsafe fn set_theme(webview: &ICoreWebView2, theme: Theme) -> Result<()> {
 /// and this function tests if the URI starts with `{http_or_https}://{protocol}.`
 ///
 /// See https://github.com/MicrosoftEdge/WebView2Feedback/issues/73
+/// Wait for a WebView2 async result while pumping messages, without re-entering the embedder
+/// (GPUIdium patch 8, replaces `webview2_com::wait_with_pump`).
+///
+/// GPUI creates web views from inside its own event handling, with its app state borrowed.
+/// `wait_with_pump` dispatches every message, including GPUI's queued foreground tasks and
+/// input, which then run re-entrantly, fail to borrow the app state and abort the process.
+/// Here only posted messages for windows that are not the embedder's (GPUI's `Zed::*` window
+/// classes) are dispatched; WebView2 and COM deliver their completions that way, and messages
+/// sent from other threads are handled while waiting. Input and paint stay queued; the
+/// embedder's posted messages are posted again, in order, once the result is in.
+fn wait_with_pump_isolated<T>(rx: mpsc::Receiver<T>) -> webview2_com::Result<T> {
+  fn is_embedder_window(hwnd: HWND) -> bool {
+    if hwnd.is_invalid() {
+      return false;
+    }
+    let mut buf = [0u16; 64];
+    let n = unsafe { GetClassNameW(hwnd, &mut buf) };
+    n > 0 && String::from_utf16_lossy(&buf[..n as usize]).starts_with("Zed::")
+  }
+
+  let mut deferred: Vec<MSG> = Vec::new();
+  let result = loop {
+    if let Ok(result) = rx.try_recv() {
+      break Ok(result);
+    }
+    let mut msg = MSG::default();
+    let got = unsafe {
+      PeekMessageW(
+        &mut msg,
+        None,
+        0,
+        0,
+        PM_REMOVE | PM_QS_POSTMESSAGE | PM_QS_SENDMESSAGE,
+      )
+    };
+    if !got.as_bool() {
+      // Sleep until something is posted or sent (sent messages are handled inside the wait).
+      unsafe {
+        MsgWaitForMultipleObjectsEx(
+          None,
+          u32::MAX, // INFINITE
+          QS_POSTMESSAGE | QS_SENDMESSAGE | QS_TIMER,
+          MWMO_INPUTAVAILABLE,
+        )
+      };
+      continue;
+    }
+    if msg.message == WM_QUIT {
+      unsafe { PostQuitMessage(msg.wParam.0 as i32) };
+      break Err(webview2_com::Error::TaskCanceled);
+    }
+    if is_embedder_window(msg.hwnd) {
+      // Timer messages are regenerated on every tick; keep one per timer.
+      let dup = msg.message == WM_TIMER
+        && deferred
+          .iter()
+          .any(|m| m.message == WM_TIMER && m.hwnd == msg.hwnd && m.wParam == msg.wParam);
+      if !dup {
+        deferred.push(msg);
+      }
+    } else {
+      unsafe {
+        let _ = TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+      }
+    }
+  };
+  for m in deferred {
+    unsafe {
+      let _ = PostMessageW(Some(m.hwnd), m.message, m.wParam, m.lParam);
+    }
+  }
+  result
+}
+
 fn is_work_around_uri(uri: &str, http_or_https: &str, protocol: &str) -> bool {
   uri
     .strip_prefix(http_or_https)
